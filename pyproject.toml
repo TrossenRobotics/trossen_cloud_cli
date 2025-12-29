@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trc"
+version = "0.0.1"
+description = "Trossen Robotics Cloud CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0.0",
+]
+
+[project.scripts]
+trc = "trc.cli:main"

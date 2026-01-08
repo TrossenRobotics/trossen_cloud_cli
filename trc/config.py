@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 
-CONFIG_DIR = Path.home() / ".trc"
+CONFIG_DIR = Path.home() / ".trossen"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
@@ -18,8 +18,8 @@ def load_config() -> Dict[str, Any]:
     """
     Load configuration from the config file.
     
-    Returns:
-        Dictionary containing configuration data, or empty dict if file doesn't exist.
+    :returns: Dictionary containing configuration data, or empty dict if file doesn't exist.
+    :rtype: Dict[str, Any]
     """
     if not CONFIG_FILE.exists():
         return {}
@@ -35,8 +35,8 @@ def save_config(config: Dict[str, Any]) -> None:
     """
     Save configuration to the config file.
     
-    Args:
-        config: Dictionary containing configuration data to save.
+    :param config: Dictionary containing configuration data to save.
+    :type config: Dict[str, Any]
     """
     ensure_config_dir()
     with open(CONFIG_FILE, 'w') as f:

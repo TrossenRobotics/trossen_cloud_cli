@@ -1,6 +1,6 @@
 """Authentication commands for TRC CLI."""
 import click
-from ..auth import login as auth_login, logout as auth_logout, get_auth_status
+from trc.auth import login as auth_login, logout as auth_logout, get_auth_status
 
 
 @click.group()
@@ -13,10 +13,9 @@ def auth():
 def login():
     """Log in to Trossen Robotics Cloud."""
     username = click.prompt("Username")
-    org = click.prompt("Organization", default="trossen-robotics")
     
-    auth_login(username, org)
-    click.echo(f"Successfully logged in as {username} (org: {org})")
+    auth_login(username)
+    click.echo(f"Successfully logged in as {username}")
 
 
 @auth.command()
@@ -31,8 +30,7 @@ def status():
     """Check authentication status."""
     auth_status = get_auth_status()
     
-    if auth_status["authenticated"]:
-        click.echo(f"Logged in as: {auth_status['username']}")
-        click.echo(f"Organization: {auth_status['org']}")
+    if auth_status.authenticated:
+        click.echo(f"Logged in as: {auth_status.username}")
     else:
         click.echo("Not authenticated")

@@ -1,6 +1,6 @@
 """List command for TRC CLI."""
 import click
-from ..auth import require_auth
+from trc.auth import require_auth
 
 
 @click.command()
@@ -13,4 +13,4 @@ def ls():
     click.echo("Cloud resources:")
     click.echo("  datasets/")
     click.echo("  models/")
-    click.echo("  logs/")
+

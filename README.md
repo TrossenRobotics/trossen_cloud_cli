@@ -26,9 +26,12 @@ trc auth login --token <your-api-token>
 
 # Or receive a password prompt
 trc auth login
+
+# Check authentication status
+trc auth status
 ```
 
-The token is stored in your OS keyring (with a file fallback).
+The token is stored securely in your OS keyring.
 
 ## Usage
 

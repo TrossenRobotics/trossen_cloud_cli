@@ -11,7 +11,7 @@ from .config import get_token_file
 from .output import console
 from .types import StoredToken
 
-KEYRING_SERVICE = "trossen-cli"
+KEYRING_SERVICE = "trossen-cloud-cli"
 KEYRING_USERNAME = "tokens"
 
 

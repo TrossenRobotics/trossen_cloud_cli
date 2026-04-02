@@ -58,9 +58,3 @@ clean:  ## Clean build artifacts
 
 build:  ## Build the package
 	$(UV) build
-
-publish:  ## Publish to PyPI (requires authentication)
-	$(UV) publish
-
-publish-test:  ## Publish to TestPyPI
-	$(UV) publish --index-url https://test.pypi.org/simple/

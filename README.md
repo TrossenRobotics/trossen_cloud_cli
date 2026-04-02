@@ -7,13 +7,19 @@ CLI for interacting with Trossen Cloud datasets, models, and training jobs.
 Requires Python 3.11+.
 
 ```bash
-uv tool install git+https://github.com/TrossenRobotics/trossen_cloud_cli.git
+uv tool install trossen-cloud-cli
 ```
 
 Or with pipx:
 
 ```bash
-pipx install git+https://github.com/TrossenRobotics/trossen_cloud_cli.git
+pipx install trossen-cloud-cli
+```
+
+Or with pip:
+
+```bash
+pip install trossen-cloud-cli
 ```
 
 ## Authentication

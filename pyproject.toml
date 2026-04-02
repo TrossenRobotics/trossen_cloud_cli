@@ -12,10 +12,14 @@ license = "BSD-3-Clause"
 authors = [
     { name = "Trossen Robotics" }
 ]
-classifiers = [
-    "Development Status :: 4 - Beta",
+keywords = [
+    "robotics",
+    "cli",
+    "trossen",
+    "cloud",
+    "datasets",
+    "models",
 ]
-
 dependencies = [
     "httpx>=0.25.0",
     "huggingface_hub>=0.20.0",
@@ -25,6 +29,22 @@ dependencies = [
     "tomli-w>=1.0.0",
     "typer>=0.9.0",
 ]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/TrossenRobotics/trossen_cloud_cli"
+Repository = "https://github.com/TrossenRobotics/trossen_cloud_cli"
+Issues = "https://github.com/TrossenRobotics/trossen_cloud_cli/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -37,6 +57,14 @@ dev = [
 
 [project.scripts]
 trc = "trossen_cloud_cli.cli:app"
+
+[tool.hatch.build]
+exclude = [
+    "CLAUDE.md",
+    ".claude/",
+    "Makefile",
+    "uv.lock",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trossen_cloud_cli"]

@@ -17,30 +17,30 @@ test:  ## Run tests
 	$(UV) run pytest tests/ -v
 
 test-cov:  ## Run tests with coverage
-	$(UV) run pytest tests/ --cov=trossen_cli --cov-report=term-missing --cov-report=html
+	$(UV) run pytest tests/ --cov=trossen_cloud_cli --cov-report=term-missing --cov-report=html
 
 lint:  ## Run linter
-	$(UV) run ruff check src/trossen_cli tests
+	$(UV) run ruff check src/trossen_cloud_cli tests
 
 lint-fix:  ## Run linter and fix issues
-	$(UV) run ruff check --fix src/trossen_cli tests
+	$(UV) run ruff check --fix src/trossen_cloud_cli tests
 
 format:  ## Format code
-	$(UV) run ruff format src/trossen_cli tests
+	$(UV) run ruff format src/trossen_cloud_cli tests
 
 format-check:  ## Check code formatting
-	$(UV) run ruff format --check src/trossen_cli tests
+	$(UV) run ruff format --check src/trossen_cloud_cli tests
 
 typecheck:  ## Run type checker
-	$(UV) run mypy src/trossen_cli
+	$(UV) run mypy src/trossen_cloud_cli
 
 check:  ## Run all checks (lint, format, typecheck, test)
 	@echo "Running linter..."
-	$(UV) run ruff check src/trossen_cli tests
+	$(UV) run ruff check src/trossen_cloud_cli tests
 	@echo "Checking format..."
-	$(UV) run ruff format --check src/trossen_cli tests
+	$(UV) run ruff format --check src/trossen_cloud_cli tests
 	@echo "Running type checker..."
-	$(UV) run mypy src/trossen_cli
+	$(UV) run mypy src/trossen_cloud_cli
 	@echo "Running tests..."
 	$(UV) run pytest tests/ -v
 

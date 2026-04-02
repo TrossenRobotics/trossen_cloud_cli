@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from trossen_cli.cli import app
+from trossen_cloud_cli.cli import app
 
 runner = CliRunner()
 
@@ -22,7 +22,7 @@ def mock_auth():
     """
     Patch auth to return a mock token.
     """
-    return patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN)
+    return patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN)
 
 
 def mock_client_get(return_value):
@@ -30,7 +30,7 @@ def mock_client_get(return_value):
     Patch ApiClient.get to return a mock response.
     """
     mock = AsyncMock(return_value=return_value)
-    return patch("trossen_cli.api_client.ApiClient.get", mock), mock
+    return patch("trossen_cloud_cli.api_client.ApiClient.get", mock), mock
 
 
 def mock_client_post(return_value):
@@ -38,7 +38,7 @@ def mock_client_post(return_value):
     Patch ApiClient.post to return a mock response.
     """
     mock = AsyncMock(return_value=return_value)
-    return patch("trossen_cli.api_client.ApiClient.post", mock), mock
+    return patch("trossen_cloud_cli.api_client.ApiClient.post", mock), mock
 
 
 def mock_client_patch(return_value):
@@ -46,7 +46,7 @@ def mock_client_patch(return_value):
     Patch ApiClient.patch to return a mock response.
     """
     mock = AsyncMock(return_value=return_value)
-    return patch("trossen_cli.api_client.ApiClient.patch", mock), mock
+    return patch("trossen_cloud_cli.api_client.ApiClient.patch", mock), mock
 
 
 def mock_client_delete(return_value=None):
@@ -54,7 +54,7 @@ def mock_client_delete(return_value=None):
     Patch ApiClient.delete to return a mock response.
     """
     mock = AsyncMock(return_value=return_value or {})
-    return patch("trossen_cli.api_client.ApiClient.delete", mock), mock
+    return patch("trossen_cloud_cli.api_client.ApiClient.delete", mock), mock
 
 
 # -- Dataset List Tests --
@@ -458,7 +458,7 @@ class TestUploadEndpoints:
         """
         POST /datasets with correct DatasetCreate fields.
         """
-        from trossen_cli.upload import create_and_upload_dataset
+        from trossen_cloud_cli.upload import create_and_upload_dataset
 
         create_response = {"dataset_id": "ds-new", "files": [], "status": "pending"}
         finalize_response = {
@@ -470,12 +470,14 @@ class TestUploadEndpoints:
         }
 
         with (
-            patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN),
-            patch("trossen_cli.api_client.ApiClient.post", new_callable=AsyncMock) as post_mock,
-            patch("trossen_cli.upload.upload_resource", new_callable=AsyncMock),
-            patch("trossen_cli.upload.collect_files") as collect_mock,
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch(
+                "trossen_cloud_cli.api_client.ApiClient.post", new_callable=AsyncMock
+            ) as post_mock,
+            patch("trossen_cloud_cli.upload.upload_resource", new_callable=AsyncMock),
+            patch("trossen_cloud_cli.upload.collect_files") as collect_mock,
         ):
-            from trossen_cli.types import FileInfo
+            from trossen_cloud_cli.types import FileInfo
 
             collect_mock.return_value = [
                 FileInfo(path="data.bin", size_bytes=100, content_type="application/octet-stream")
@@ -513,7 +515,7 @@ class TestUploadEndpoints:
         """
         POST /models uses parent_model_id, not base_model_id.
         """
-        from trossen_cli.upload import create_and_upload_model
+        from trossen_cloud_cli.upload import create_and_upload_model
 
         create_response = {"model_id": "m-new", "files": [], "status": "pending"}
         finalize_response = {
@@ -525,12 +527,14 @@ class TestUploadEndpoints:
         }
 
         with (
-            patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN),
-            patch("trossen_cli.api_client.ApiClient.post", new_callable=AsyncMock) as post_mock,
-            patch("trossen_cli.upload.upload_resource", new_callable=AsyncMock),
-            patch("trossen_cli.upload.collect_files") as collect_mock,
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch(
+                "trossen_cloud_cli.api_client.ApiClient.post", new_callable=AsyncMock
+            ) as post_mock,
+            patch("trossen_cloud_cli.upload.upload_resource", new_callable=AsyncMock),
+            patch("trossen_cloud_cli.upload.collect_files") as collect_mock,
         ):
-            from trossen_cli.types import FileInfo
+            from trossen_cloud_cli.types import FileInfo
 
             collect_mock.return_value = [
                 FileInfo(path="model.pt", size_bytes=200, content_type="application/octet-stream")
@@ -560,7 +564,7 @@ class TestDownloadEndpoints:
         """
         GET /{type}/{id}/download-urls returns FileDownloadInfo array.
         """
-        from trossen_cli.download import download_resource
+        from trossen_cloud_cli.download import download_resource
 
         download_response = {
             "resource_id": "ds-1",
@@ -586,9 +590,9 @@ class TestDownloadEndpoints:
         }
 
         with (
-            patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN),
-            patch("trossen_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
-            patch("trossen_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
         ):
             get_mock.return_value = download_response
 
@@ -607,7 +611,7 @@ class TestDownloadEndpoints:
         """
         Refuse to write files outside output directory.
         """
-        from trossen_cli.download import DownloadError, download_resource
+        from trossen_cloud_cli.download import DownloadError, download_resource
 
         traversal_response = {
             "resource_id": "ds-1",
@@ -626,9 +630,9 @@ class TestDownloadEndpoints:
         }
 
         with (
-            patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN),
-            patch("trossen_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
-            patch("trossen_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
         ):
             get_mock.return_value = traversal_response
 
@@ -643,7 +647,7 @@ class TestDownloadEndpoints:
         """
         Refuse to write to absolute paths from server.
         """
-        from trossen_cli.download import DownloadError, download_resource
+        from trossen_cloud_cli.download import DownloadError, download_resource
 
         absolute_response = {
             "resource_id": "ds-1",
@@ -662,9 +666,9 @@ class TestDownloadEndpoints:
         }
 
         with (
-            patch("trossen_cli.auth.get_token", return_value=MOCK_TOKEN),
-            patch("trossen_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
-            patch("trossen_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
         ):
             get_mock.return_value = absolute_response
 

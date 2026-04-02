@@ -2,7 +2,7 @@
 
 from typer.testing import CliRunner
 
-from trossen_cli.cli import app
+from trossen_cloud_cli.cli import app
 
 runner = CliRunner()
 

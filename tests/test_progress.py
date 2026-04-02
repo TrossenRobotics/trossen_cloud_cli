@@ -1,6 +1,6 @@
 """Tests for output utilities."""
 
-from trossen_cli.output import format_size
+from trossen_cloud_cli.output import format_size
 
 
 def test_format_size_bytes():

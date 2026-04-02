@@ -1,1 +1,1 @@
-"""Tests for trossen_cli."""
+"""Tests for trossen_cloud_cli."""

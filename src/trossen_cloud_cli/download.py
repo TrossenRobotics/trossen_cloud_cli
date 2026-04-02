@@ -148,7 +148,9 @@ async def download_resource(
                 async def download_with_semaphore(file_path: str, url: str):
                     async with semaphore:
                         local_path = output_dir / file_path
-                        await download_file(download_client, url, local_path, file_path, None, chunk_size)
+                        await download_file(
+                            download_client, url, local_path, file_path, None, chunk_size
+                        )
 
                 tasks = [download_with_semaphore(path, url) for path, url in files.items()]
                 await asyncio.gather(*tasks)

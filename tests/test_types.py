@@ -1,6 +1,6 @@
 """Tests for types module."""
 
-from trossen_cli.types import (
+from trossen_cloud_cli.types import (
     DatasetInfo,
     DatasetType,
     FileInfo,

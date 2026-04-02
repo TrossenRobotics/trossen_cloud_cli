@@ -4,9 +4,9 @@ import importlib
 
 from typer.testing import CliRunner
 
-import trossen_cli.api_client
-from trossen_cli.cli import app
-from trossen_cli.config import (
+import trossen_cloud_cli.api_client
+from trossen_cloud_cli.cli import app
+from trossen_cloud_cli.config import (
     Config,
     DownloadConfig,
     UploadConfig,
@@ -45,9 +45,9 @@ def test_env_var_override(monkeypatch):
     # Ensure TROSSEN_API_URL is not set, then reload api_client module to make test deterministic
     # regardless of environment
     monkeypatch.delenv("TROSSEN_API_URL", raising=False)
-    importlib.reload(trossen_cli.api_client)
+    importlib.reload(trossen_cloud_cli.api_client)
 
-    from trossen_cli.api_client import API_BASE_URL
+    from trossen_cloud_cli.api_client import API_BASE_URL
 
     # Default value when env var not set during import
     assert "cloud.trossen.com" in API_BASE_URL
@@ -89,9 +89,9 @@ class TestConfigShow:
 class TestConfigSet:
     def test_set_valid_key(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.toml"
-        monkeypatch.setattr("trossen_cli.config.get_config_file", lambda: config_file)
-        monkeypatch.setattr("trossen_cli.commands.config.load_config", load_config)
-        monkeypatch.setattr("trossen_cli.commands.config.save_config", save_config)
+        monkeypatch.setattr("trossen_cloud_cli.config.get_config_file", lambda: config_file)
+        monkeypatch.setattr("trossen_cloud_cli.commands.config.load_config", load_config)
+        monkeypatch.setattr("trossen_cloud_cli.commands.config.save_config", save_config)
 
         result = runner.invoke(app, ["config", "set", "upload.chunk_size_mb", "100"])
         assert result.exit_code == 0
@@ -113,7 +113,7 @@ class TestConfigSet:
 
     def test_set_zero_rejected(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.toml"
-        monkeypatch.setattr("trossen_cli.config.get_config_file", lambda: config_file)
+        monkeypatch.setattr("trossen_cloud_cli.config.get_config_file", lambda: config_file)
 
         result = runner.invoke(app, ["config", "set", "upload.chunk_size_mb", "0"])
         assert result.exit_code == 1
@@ -121,7 +121,7 @@ class TestConfigSet:
 
     def test_set_negative_rejected(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.toml"
-        monkeypatch.setattr("trossen_cli.config.get_config_file", lambda: config_file)
+        monkeypatch.setattr("trossen_cloud_cli.config.get_config_file", lambda: config_file)
 
         result = runner.invoke(app, ["config", "set", "upload.parallel_parts", "--", "-1"])
         assert result.exit_code == 1
@@ -131,8 +131,8 @@ class TestConfigSet:
 class TestConfigReset:
     def test_reset_with_force(self, tmp_path, monkeypatch):
         config_file = tmp_path / "config.toml"
-        monkeypatch.setattr("trossen_cli.config.get_config_file", lambda: config_file)
-        monkeypatch.setattr("trossen_cli.commands.config.save_config", save_config)
+        monkeypatch.setattr("trossen_cloud_cli.config.get_config_file", lambda: config_file)
+        monkeypatch.setattr("trossen_cloud_cli.commands.config.save_config", save_config)
 
         # First set a non-default value
         save_config(Config(upload=UploadConfig(chunk_size_mb=200)))

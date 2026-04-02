@@ -36,10 +36,10 @@ dev = [
 ]
 
 [project.scripts]
-trc = "trossen_cli.cli:app"
+trc = "trossen_cloud_cli.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/trossen_cli"]
+packages = ["src/trossen_cloud_cli"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

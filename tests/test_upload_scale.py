@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from trossen_cli.types import FileUploadState, UploadState
-from trossen_cli.upload import (
+from trossen_cloud_cli.types import FileUploadState, UploadState
+from trossen_cloud_cli.upload import (
     BATCH_CHUNK_SIZE,
     UploadError,
     _upload_file_parts,
@@ -24,7 +24,7 @@ def _mock_file_info(count: int):
     """
     Create mock FileInfo objects.
     """
-    from trossen_cli.types import FileInfo
+    from trossen_cloud_cli.types import FileInfo
 
     return [
         FileInfo(path=f"file_{i:04d}.bin", size_bytes=1024, content_type="application/octet-stream")
@@ -56,11 +56,13 @@ def _patch_upload_internals():
     Patch upload internals so tests don't touch disk or storage.
     """
     with (
-        patch("trossen_cli.upload.load_upload_state", return_value=None),
-        patch("trossen_cli.upload.save_upload_state"),
-        patch("trossen_cli.upload.clear_upload_state"),
-        patch("trossen_cli.upload.upload_part", new_callable=AsyncMock, return_value='"etag"'),
-        patch("trossen_cli.upload.print_error"),
+        patch("trossen_cloud_cli.upload.load_upload_state", return_value=None),
+        patch("trossen_cloud_cli.upload.save_upload_state"),
+        patch("trossen_cloud_cli.upload.clear_upload_state"),
+        patch(
+            "trossen_cloud_cli.upload.upload_part", new_callable=AsyncMock, return_value='"etag"'
+        ),
+        patch("trossen_cloud_cli.upload.print_error"),
     ):
         yield
 
@@ -257,11 +259,11 @@ class TestErrorIsolation:
         mock_client.post = mock_post
 
         with (
-            patch("trossen_cli.upload.load_upload_state", return_value=None),
-            patch("trossen_cli.upload.save_upload_state"),
-            patch("trossen_cli.upload.clear_upload_state"),
-            patch("trossen_cli.upload.upload_part", side_effect=mock_upload_part),
-            patch("trossen_cli.upload.print_error"),
+            patch("trossen_cloud_cli.upload.load_upload_state", return_value=None),
+            patch("trossen_cloud_cli.upload.save_upload_state"),
+            patch("trossen_cloud_cli.upload.clear_upload_state"),
+            patch("trossen_cloud_cli.upload.upload_part", side_effect=mock_upload_part),
+            patch("trossen_cloud_cli.upload.print_error"),
         ):
             with pytest.raises(UploadError, match="1 file.*failed"):
                 await upload_resource(
@@ -374,8 +376,8 @@ class TestResumeUpload:
         mock_upload = AsyncMock()
 
         with (
-            patch("trossen_cli.upload.upload_part", side_effect=mock_upload_part),
-            patch("trossen_cli.upload.save_upload_state"),
+            patch("trossen_cloud_cli.upload.upload_part", side_effect=mock_upload_part),
+            patch("trossen_cloud_cli.upload.save_upload_state"),
         ):
             await _upload_file_parts(
                 upload_client=mock_upload,
@@ -418,18 +420,21 @@ class TestResumeUpload:
 
         with (
             patch(
-                "trossen_cli.upload.upload_part",
+                "trossen_cloud_cli.upload.upload_part",
                 new_callable=AsyncMock,
                 return_value='"etag"',
             ),
-            patch("trossen_cli.upload.save_upload_state"),
+            patch("trossen_cloud_cli.upload.save_upload_state"),
         ):
             # Only part 2 URL provided; part 1 should be skipped
             await _upload_file_parts(
                 upload_client=mock_upload,
                 file_path="data.bin",
                 local_path=test_file,
-                part_urls={1: "https://storage.example.com/p1", 2: "https://storage.example.com/p2"},
+                part_urls={
+                    1: "https://storage.example.com/p1",
+                    2: "https://storage.example.com/p2",
+                },
                 part_size=1024,
                 progress=None,
                 state=state,
@@ -465,11 +470,11 @@ class TestResumeUpload:
 
         with (
             patch(
-                "trossen_cli.upload.upload_part",
+                "trossen_cloud_cli.upload.upload_part",
                 new_callable=AsyncMock,
                 return_value='"etag"',
             ),
-            patch("trossen_cli.upload.save_upload_state"),
+            patch("trossen_cloud_cli.upload.save_upload_state"),
         ):
             await _upload_file_parts(
                 upload_client=mock_upload,
@@ -520,11 +525,11 @@ class TestResumeUpload:
         mock_client.post = mock_post
 
         with (
-            patch("trossen_cli.upload.load_upload_state", return_value=state),
-            patch("trossen_cli.upload.save_upload_state"),
-            patch("trossen_cli.upload.clear_upload_state"),
+            patch("trossen_cloud_cli.upload.load_upload_state", return_value=state),
+            patch("trossen_cloud_cli.upload.save_upload_state"),
+            patch("trossen_cloud_cli.upload.clear_upload_state"),
             patch(
-                "trossen_cli.upload.upload_part",
+                "trossen_cloud_cli.upload.upload_part",
                 new_callable=AsyncMock,
                 return_value='"etag"',
             ),

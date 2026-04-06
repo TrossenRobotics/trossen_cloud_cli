@@ -14,9 +14,10 @@ from rich.table import Table
 from ..api_client import ApiClient, ApiError
 from ..auth import require_auth
 from ..download import download_dataset
-from ..output import console, print_error, print_info, print_success
+from ..output import console, print_error, print_info, print_success, print_warning
 from ..types import DatasetType, PrivacyLevel
 from ..upload import UploadError, create_and_upload_dataset
+from ..validators import validate_dataset
 
 app = typer.Typer(help="Manage datasets")
 
@@ -66,6 +67,10 @@ def upload(
         str | None,
         typer.Option("--metadata", "-m", help="JSON metadata string"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip validation confirmation prompt"),
+    ] = False,
 ) -> None:
     """
     Upload a dataset to Trossen Cloud.
@@ -80,6 +85,18 @@ def upload(
         except json.JSONDecodeError:
             print_error("Invalid JSON metadata")
             raise typer.Exit(1)
+
+    # Validate dataset before upload
+    validation_warnings = validate_dataset(path, dataset_type)
+    if validation_warnings:
+        console.print(
+            f"\n[warning]Found {len(validation_warnings)} validation warning(s):[/warning]"
+        )
+        for w in validation_warnings:
+            print_warning(w)
+        console.print()
+        if not force and not typer.confirm("Continue with upload?"):
+            raise typer.Exit(0)
 
     try:
         dataset = asyncio.run(
@@ -152,6 +169,10 @@ def import_hf(
         bool,
         typer.Option("--keep-local", help="Keep the downloaded files after upload"),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip validation confirmation prompt"),
+    ] = False,
 ) -> None:
     """
     Import a public HuggingFace dataset into Trossen Cloud.
@@ -200,6 +221,18 @@ def import_hf(
         )
 
         print_success(f"Downloaded to {local_path}")
+
+        # Validate dataset before upload
+        validation_warnings = validate_dataset(local_path, dataset_type)
+        if validation_warnings:
+            console.print(
+                f"\n[warning]Found {len(validation_warnings)} validation warning(s):[/warning]"
+            )
+            for w in validation_warnings:
+                print_warning(w)
+            console.print()
+            if not force and not typer.confirm("Continue with upload?"):
+                raise typer.Exit(0)
 
         # Upload to Trossen Cloud
         dataset = asyncio.run(

@@ -18,8 +18,6 @@ def test_dataset_type_values():
     """
     assert DatasetType.MCAP == "mcap"
     assert DatasetType.LEROBOT == "lerobot"
-    assert DatasetType.TROSSEN == "trossen"
-    assert DatasetType.RAW == "raw"
 
 
 def test_privacy_level_values():

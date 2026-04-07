@@ -65,7 +65,7 @@ class TestDatasetList:
         """
         GET /datasets/ with limit param.
         """
-        datasets = [{"id": "abc-123", "name": "test-ds", "type": "raw", "privacy": "private"}]
+        datasets = [{"id": "abc-123", "name": "test-ds", "type": "mcap", "privacy": "private"}]
         get_patch, get_mock = mock_client_get(datasets)
         with mock_auth(), get_patch:
             result = runner.invoke(app, ["dataset", "list"])
@@ -104,7 +104,7 @@ class TestDatasetInfo:
         dataset = {
             "id": "abc-123",
             "name": "test-ds",
-            "type": "raw",
+            "type": "mcap",
             "privacy": "private",
             "user_id": "user-1",
         }
@@ -122,7 +122,7 @@ class TestDatasetInfo:
         dataset = {
             "id": "abc-123",
             "name": "test-ds",
-            "type": "raw",
+            "type": "mcap",
             "privacy": "private",
             "user_id": "user-456",
         }
@@ -138,7 +138,7 @@ class TestDatasetInfo:
         dataset = {
             "id": "abc-123",
             "name": "test-ds",
-            "type": "raw",
+            "type": "mcap",
             "privacy": "private",
             "dataset_metadata": {"key": "value"},
         }
@@ -156,7 +156,7 @@ class TestDatasetDelete:
         """
         DELETE /datasets/{uuid}.
         """
-        dataset = {"id": "abc-123", "name": "test-ds", "type": "raw", "privacy": "private"}
+        dataset = {"id": "abc-123", "name": "test-ds", "type": "mcap", "privacy": "private"}
         get_patch, _ = mock_client_get(dataset)
         del_patch, del_mock = mock_client_delete()
         with mock_auth(), get_patch, del_patch:
@@ -176,7 +176,7 @@ class TestDatasetUpdate:
         dataset = {
             "id": "abc-123",
             "name": "new-name",
-            "type": "raw",
+            "type": "mcap",
             "privacy": "public",
         }
         get_patch, _ = mock_client_get(dataset)
@@ -194,7 +194,7 @@ class TestDatasetUpdate:
         """
         PATCH /datasets/{uuid} sends dataset_metadata.
         """
-        dataset = {"id": "abc-123", "name": "ds", "type": "raw", "privacy": "private"}
+        dataset = {"id": "abc-123", "name": "ds", "type": "mcap", "privacy": "private"}
         get_patch, _ = mock_client_get(dataset)
         patch_ctx, patch_mock = mock_client_patch(dataset)
         with mock_auth(), get_patch, patch_ctx:
@@ -487,7 +487,7 @@ class TestUploadEndpoints:
             result = await create_and_upload_dataset(
                 name="test-ds",
                 local_path=Path("/tmp/test"),
-                dataset_type="raw",
+                dataset_type="mcap",
                 privacy="private",
                 metadata={"env": "lab"},
                 show_progress=False,
@@ -498,7 +498,7 @@ class TestUploadEndpoints:
         assert create_call[0][0] == "/datasets"
         payload = create_call[1]["json"]
         assert payload["name"] == "test-ds"
-        assert payload["type"] == "raw"
+        assert payload["type"] == "mcap"
         assert payload["privacy"] == "private"
         assert payload["dataset_metadata"] == {"env": "lab"}
         assert len(payload["files"]) == 1

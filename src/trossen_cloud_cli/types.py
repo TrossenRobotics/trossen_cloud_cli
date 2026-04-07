@@ -12,8 +12,6 @@ class DatasetType(StrEnum):
 
     MCAP = "mcap"
     LEROBOT = "lerobot"
-    TROSSEN = "trossen"
-    RAW = "raw"
 
 
 class PrivacyLevel(StrEnum):

@@ -16,8 +16,8 @@ def test_dataset_type_values():
     """
     Test DatasetType enum values.
     """
-    assert DatasetType.MCAP == "mcap"
-    assert DatasetType.LEROBOT == "lerobot"
+    assert DatasetType.TROSSENMCAP == "trossenmcap"
+    assert DatasetType.LEROBOT_V3 == "lerobot_v3"
 
 
 def test_privacy_level_values():
@@ -102,14 +102,14 @@ def test_dataset_info():
     info = DatasetInfo(
         id="dataset-123",
         name="Test Dataset",
-        type=DatasetType.LEROBOT,
+        type=DatasetType.LEROBOT_V3,
         privacy=PrivacyLevel.PRIVATE,
         user_id="user-456",
         created_at="2024-01-01T00:00:00Z",
     )
     assert info.id == "dataset-123"
     assert info.name == "Test Dataset"
-    assert info.type == DatasetType.LEROBOT
+    assert info.type == DatasetType.LEROBOT_V3
     assert info.privacy == PrivacyLevel.PRIVATE
     assert info.user_id == "user-456"
 

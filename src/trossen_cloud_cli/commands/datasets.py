@@ -152,7 +152,7 @@ def import_hf(
     dataset_type: Annotated[
         DatasetType,
         typer.Option("--type", "-t", help="Dataset type"),
-    ] = DatasetType.LEROBOT,
+    ] = DatasetType.LEROBOT_V3,
     privacy: Annotated[
         PrivacyLevel,
         typer.Option("--privacy", "-p", help="Privacy level"),

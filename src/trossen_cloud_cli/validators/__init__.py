@@ -12,11 +12,11 @@ def validate_dataset(path: Path, dataset_type: DatasetType) -> list[str]:
     Validate a dataset directory against its type-specific spec.
 
     Returns a list of warning messages. An empty list means no issues found.
-    Only runs for dataset types that have a validator (mcap, lerobot).
+    Only runs for dataset types that have a validator (trossenmcap, lerobot_v3).
     """
     validators = {
-        DatasetType.MCAP: validate_mcap,
-        DatasetType.LEROBOT: validate_lerobot,
+        DatasetType.TROSSENMCAP: validate_mcap,
+        DatasetType.LEROBOT_V3: validate_lerobot,
     }
 
     validator = validators.get(dataset_type)

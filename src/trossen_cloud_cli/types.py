@@ -10,8 +10,8 @@ class DatasetType(StrEnum):
     Supported dataset types.
     """
 
-    MCAP = "mcap"
-    LEROBOT = "lerobot"
+    TROSSENMCAP = "trossenmcap"
+    LEROBOT_V3 = "lerobot_v3"
 
 
 class PrivacyLevel(StrEnum):

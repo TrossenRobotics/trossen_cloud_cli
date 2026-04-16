@@ -152,12 +152,12 @@ def _make_valid_mcap_dataset(tmp_path: Path, num_episodes: int = 3) -> Path:
 class TestValidateDataset:
     def test_dispatches_to_lerobot(self, tmp_path):
         ds = _make_valid_lerobot(tmp_path)
-        warnings = validate_dataset(ds, DatasetType.LEROBOT)
+        warnings = validate_dataset(ds, DatasetType.LEROBOT_V3)
         assert warnings == []
 
     def test_dispatches_to_mcap(self, tmp_path):
         ds = _make_valid_mcap_dataset(tmp_path)
-        warnings = validate_dataset(ds, DatasetType.MCAP)
+        warnings = validate_dataset(ds, DatasetType.TROSSENMCAP)
         assert warnings == []
 
 
@@ -590,7 +590,16 @@ class TestForceFlag:
         ):
             result = runner.invoke(
                 app,
-                ["dataset", "upload", str(ds), "--name", "test", "--type", "mcap", "--force"],
+                [
+                    "dataset",
+                    "upload",
+                    str(ds),
+                    "--name",
+                    "test",
+                    "--type",
+                    "trossenmcap",
+                    "--force",
+                ],
             )
             assert result.exit_code == 0
             upload_mock.assert_called_once()
@@ -610,7 +619,7 @@ class TestForceFlag:
         ):
             result = runner.invoke(
                 app,
-                ["dataset", "upload", str(ds), "--name", "test", "--type", "mcap"],
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "trossenmcap"],
                 input="n\n",
             )
             assert result.exit_code == 0

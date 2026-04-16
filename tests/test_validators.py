@@ -2,6 +2,7 @@
 
 import json
 import struct
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -743,3 +744,125 @@ class TestForceFlag:
             assert "lerobot_v3" in result.output
             upload_mock.assert_called_once()
             assert upload_mock.call_args.kwargs["dataset_type"] == "lerobot_v3"
+
+
+# ── Type alias / parsing tests ──────────────────────────────────────────────
+
+
+@contextmanager
+def _mock_upload():
+    """Patch auth + validation + upload for a successful dataset upload invocation."""
+    with (
+        patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+        patch("trossen_cloud_cli.commands.datasets.validate_dataset", return_value=[]),
+        patch(
+            "trossen_cloud_cli.commands.datasets.create_and_upload_dataset",
+            return_value={"id": "ds-123", "name": "test"},
+        ) as upload_mock,
+    ):
+        yield upload_mock
+
+
+class TestTypeAliases:
+    def test_upload_accepts_alias_lerobot(self, tmp_path):
+        """--type lerobot is accepted as an alias for lerobot_v3."""
+        ds = _make_valid_lerobot(tmp_path)
+        with _mock_upload() as upload_mock:
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "lerobot"],
+            )
+        assert result.exit_code == 0
+        upload_mock.assert_called_once()
+        assert upload_mock.call_args.kwargs["dataset_type"] == "lerobot_v3"
+
+    def test_upload_accepts_alias_mcap(self, tmp_path):
+        """--type mcap is accepted as an alias for trossenmcap."""
+        ds = _make_valid_mcap_dataset(tmp_path)
+        with _mock_upload() as upload_mock:
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "mcap"],
+            )
+        assert result.exit_code == 0
+        upload_mock.assert_called_once()
+        assert upload_mock.call_args.kwargs["dataset_type"] == "trossenmcap"
+
+    def test_upload_rejects_invalid_type(self, tmp_path):
+        """--type with an invalid value gives a clear error."""
+        ds = _make_valid_mcap_dataset(tmp_path)
+        with patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN):
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "bogus"],
+            )
+            assert result.exit_code != 0
+            assert "invalid" in result.output.lower()
+
+    def test_upload_alias_is_case_insensitive(self, tmp_path):
+        """Alias resolution lowercases the input — `LeRobot`, `MCAP`, etc. all work."""
+        ds = _make_valid_lerobot(tmp_path)
+        with _mock_upload() as upload_mock:
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "LeRobot"],
+            )
+        assert result.exit_code == 0
+        assert upload_mock.call_args.kwargs["dataset_type"] == "lerobot_v3"
+
+    def test_upload_invalid_type_fails_before_auth(self, tmp_path):
+        """Invalid --type must fail fast — before require_auth() runs."""
+        ds = _make_valid_mcap_dataset(tmp_path)
+        require_auth_mock = patch("trossen_cloud_cli.commands.datasets.require_auth")
+        with require_auth_mock as m:
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test", "--type", "bogus"],
+            )
+        assert result.exit_code != 0
+        assert "invalid" in result.output.lower()
+        m.assert_not_called()
+
+    def test_import_hf_accepts_alias(self, tmp_path):
+        """import-hf resolves --type aliases like dataset upload does."""
+        download_dir = _make_valid_lerobot(tmp_path)
+        upload_result = {"id": "ds-789", "name": "my-dataset"}
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("huggingface_hub.snapshot_download", return_value=str(download_dir)),
+            patch("trossen_cloud_cli.commands.datasets.validate_dataset", return_value=[]),
+            patch(
+                "trossen_cloud_cli.commands.datasets.create_and_upload_dataset",
+                return_value=upload_result,
+            ) as upload_mock,
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "dataset",
+                    "import-hf",
+                    "org/my-dataset",
+                    "--name",
+                    "my-dataset",
+                    "--type",
+                    "LeRobot",
+                    "--force",
+                ],
+            )
+        assert result.exit_code == 0
+        assert upload_mock.call_args.kwargs["dataset_type"] == "lerobot_v3"
+
+    def test_import_hf_invalid_type_fails_before_download(self, tmp_path):
+        """Invalid --type on import-hf must fail before snapshot_download runs."""
+        snapshot_mock = patch("huggingface_hub.snapshot_download")
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            snapshot_mock as m,
+        ):
+            result = runner.invoke(
+                app,
+                ["dataset", "import-hf", "org/my-dataset", "--type", "bogus"],
+            )
+        assert result.exit_code != 0
+        assert "invalid" in result.output.lower()
+        m.assert_not_called()

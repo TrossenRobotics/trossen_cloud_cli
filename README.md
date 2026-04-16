@@ -45,7 +45,7 @@ The token is stored securely in your OS keyring.
 
 ```bash
 # Upload a local dataset
-trc dataset upload ./my-data --name my-dataset --type lerobot_v3
+trc dataset upload ./my-data --name my-dataset
 
 # Download a dataset
 trc dataset download <dataset-id> ./output

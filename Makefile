@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format typecheck clean build publish help
+.PHONY: install dev test lint format typecheck clean build release help
 
 PYTHON := python3
 UV := uv
@@ -58,3 +58,7 @@ clean:  ## Clean build artifacts
 
 build:  ## Build the package
 	$(UV) build
+
+release:  ## Cut a release: make release VERSION=vX.Y.Z
+	@[ -n "$(VERSION)" ] || { echo "usage: make release VERSION=vX.Y.Z"; exit 1; }
+	@bash scripts/release.sh $(VERSION)

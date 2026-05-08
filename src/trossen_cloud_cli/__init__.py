@@ -1,6 +1,8 @@
 """Trossen CLI - A Python CLI for Trossen Cloud."""
 
-__version__ = "0.1.0"
+from importlib.metadata import version
+
+__version__ = version("trossen_cloud_cli")
 
 from .cli import app
 

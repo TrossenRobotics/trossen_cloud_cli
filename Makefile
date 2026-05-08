@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format typecheck clean build publish release help
+.PHONY: install dev test lint format typecheck clean build release help
 
 PYTHON := python3
 UV := uv

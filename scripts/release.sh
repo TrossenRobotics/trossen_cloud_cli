@@ -55,7 +55,10 @@ read -rp "Proceed with release $TAG? [y/N] " ans
 # Bump, commit, tag, push.
 sed -i.bak -E "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
 rm pyproject.toml.bak
-git add pyproject.toml
+# Refresh the lockfile so the embedded project version matches pyproject.toml.
+# --no-upgrade keeps transitive dependencies pinned for a deterministic release.
+uv lock --no-upgrade
+git add pyproject.toml uv.lock
 git commit -m "Release $TAG"
 git tag -a "$TAG" -m "Release $TAG"
 git push origin main "$TAG"

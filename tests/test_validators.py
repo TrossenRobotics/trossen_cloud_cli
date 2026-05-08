@@ -866,3 +866,52 @@ class TestTypeAliases:
         assert result.exit_code != 0
         assert "invalid" in result.output.lower()
         m.assert_not_called()
+
+
+# ── Validate command tests ──────────────────────────────────────────────────
+
+
+class TestValidateCommand:
+    def test_valid_dataset_exits_zero(self, tmp_path):
+        ds = _make_valid_lerobot(tmp_path)
+        result = runner.invoke(app, ["dataset", "validate", str(ds)])
+        assert result.exit_code == 0
+        assert "valid" in result.output.lower()
+        assert "lerobot_v3" in result.output
+
+    def test_warnings_exit_one(self, tmp_path):
+        ds = tmp_path / "broken"
+        ds.mkdir()
+        (ds / "meta").mkdir()
+        (ds / "meta" / "info.json").write_text("{}")
+        result = runner.invoke(app, ["dataset", "validate", str(ds)])
+        assert result.exit_code == 1
+        assert "warning" in result.output.lower()
+
+    def test_undetectable_type_errors(self, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        result = runner.invoke(app, ["dataset", "validate", str(empty)])
+        assert result.exit_code == 1
+        assert "detect" in result.output.lower()
+
+    def test_explicit_type_alias(self, tmp_path):
+        ds = _make_valid_mcap_dataset(tmp_path)
+        result = runner.invoke(app, ["dataset", "validate", str(ds), "--type", "mcap"])
+        assert result.exit_code == 0
+        assert "trossenmcap" in result.output
+
+    def test_does_not_require_auth(self, tmp_path):
+        """validate is purely local and must not require an API token."""
+        ds = _make_valid_lerobot(tmp_path)
+        with patch("trossen_cloud_cli.auth.get_token", return_value=None):
+            result = runner.invoke(app, ["dataset", "validate", str(ds)])
+        assert result.exit_code == 0
+
+    def test_validates_single_mcap_file(self, tmp_path):
+        """A single .mcap file is a valid input — validate_mcap handles file paths."""
+        f = tmp_path / "episode_000000.mcap"
+        _make_valid_mcap_file(f)
+        result = runner.invoke(app, ["dataset", "validate", str(f)])
+        assert result.exit_code == 0
+        assert "trossenmcap" in result.output

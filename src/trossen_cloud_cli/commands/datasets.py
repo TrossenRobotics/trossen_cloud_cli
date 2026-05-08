@@ -54,6 +54,24 @@ def _parse_dataset_type(value: str | None) -> DatasetType | None:
         ) from None
 
 
+def _print_validation_warnings(warnings: list[str]) -> None:
+    """Print a heading and a list of dataset validation warnings to the console."""
+    console.print(f"\n[warning]Found {len(warnings)} validation warning(s):[/warning]")
+    for w in warnings:
+        print_warning(w)
+
+
+def _validate_or_confirm(path: Path, dataset_type: DatasetType, force: bool) -> None:
+    """Run validation; if warnings, print them and prompt to continue (unless ``force``)."""
+    warnings = validate_dataset(path, dataset_type)
+    if not warnings:
+        return
+    _print_validation_warnings(warnings)
+    console.print()
+    if not force and not typer.confirm("Continue with upload?"):
+        raise typer.Exit(0)
+
+
 def _resolve_dataset_type(path: Path, dataset_type: DatasetType | None) -> DatasetType:
     """Auto-detect dataset type if not provided, or exit with an error."""
     if dataset_type is not None:
@@ -85,6 +103,35 @@ async def resolve_dataset_identifier(client: ApiClient, identifier: str) -> dict
     else:
         # UUID format
         return await client.get(f"/datasets/{identifier}")
+
+
+@app.command("validate")
+def validate(
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to the dataset directory or file to validate",
+            exists=True,
+            resolve_path=True,
+        ),
+    ],
+    dataset_type_str: _DatasetTypeOption = None,
+) -> None:
+    """
+    Validate a local dataset against its type-specific spec without uploading.
+
+    Exit codes: 0 on success, 1 on validation warnings or an undetectable type,
+    2 on invalid ``--type`` (raised by Typer).
+    """
+    dataset_type = _resolve_dataset_type(path, _parse_dataset_type(dataset_type_str))
+
+    warnings = validate_dataset(path, dataset_type)
+    if not warnings:
+        print_success(f"Dataset is valid ({dataset_type.value})")
+        return
+
+    _print_validation_warnings(warnings)
+    raise typer.Exit(1)
 
 
 @app.command("upload")
@@ -131,17 +178,7 @@ def upload(
             print_error("Invalid JSON metadata")
             raise typer.Exit(1)
 
-    # Validate dataset before upload
-    validation_warnings = validate_dataset(path, dataset_type)
-    if validation_warnings:
-        console.print(
-            f"\n[warning]Found {len(validation_warnings)} validation warning(s):[/warning]"
-        )
-        for w in validation_warnings:
-            print_warning(w)
-        console.print()
-        if not force and not typer.confirm("Continue with upload?"):
-            raise typer.Exit(0)
+    _validate_or_confirm(path, dataset_type, force)
 
     try:
         dataset = asyncio.run(
@@ -267,17 +304,7 @@ def import_hf(
 
         dataset_type = _resolve_dataset_type(local_path, parsed_type)
 
-        # Validate dataset before upload
-        validation_warnings = validate_dataset(local_path, dataset_type)
-        if validation_warnings:
-            console.print(
-                f"\n[warning]Found {len(validation_warnings)} validation warning(s):[/warning]"
-            )
-            for w in validation_warnings:
-                print_warning(w)
-            console.print()
-            if not force and not typer.confirm("Continue with upload?"):
-                raise typer.Exit(0)
+        _validate_or_confirm(local_path, dataset_type, force)
 
         # Upload to Trossen Cloud
         dataset = asyncio.run(

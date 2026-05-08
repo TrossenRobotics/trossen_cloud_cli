@@ -383,6 +383,7 @@ class TestResumeUpload:
                 upload_client=mock_upload,
                 file_path="data.bin",
                 local_path=test_file,
+                file_size=4096,
                 part_urls=part_urls,
                 part_size=1024,
                 progress=None,
@@ -431,6 +432,7 @@ class TestResumeUpload:
                 upload_client=mock_upload,
                 file_path="data.bin",
                 local_path=test_file,
+                file_size=2048,
                 part_urls={
                     1: "https://storage.example.com/p1",
                     2: "https://storage.example.com/p2",
@@ -480,6 +482,7 @@ class TestResumeUpload:
                 upload_client=mock_upload,
                 file_path="data.bin",
                 local_path=test_file,
+                file_size=3072,
                 part_urls={
                     1: "https://storage.example.com/p1",
                     2: "https://storage.example.com/p2",

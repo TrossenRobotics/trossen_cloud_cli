@@ -135,6 +135,7 @@ UPLOAD_MAX_RETRIES = 5
 STREAM_CHUNK_SIZE = 256 * 1024  # 256 KB chunks for streaming progress
 BATCH_CHUNK_SIZE = 500  # Max files per batch API call
 STATE_SAVE_INTERVAL = 10  # Save state every N part completions
+MAX_UPLOAD_CONNECTIONS = 128  # Safety cap on the upload connection pool
 
 
 async def upload_part(
@@ -167,36 +168,45 @@ async def upload_part(
     offset = (part_number - 1) * part_size
     chunk_size = min(part_size, file_size - offset)
 
-    def _read_data() -> bytes:
-        with open(file_path, "rb") as f:
-            f.seek(offset)
-            return f.read(chunk_size)
-
     last_error: Exception | None = None
     for attempt in range(UPLOAD_MAX_RETRIES):
-        data = _read_data()
+        # Re-check on every attempt: the file could be truncated/replaced between attempts,
+        # invalidating chunk_size and Content-Length.
+        current_size = file_path.stat().st_size
+        if current_size < offset + chunk_size:
+            raise UploadError(
+                f"file {file_path} truncated mid-upload "
+                f"(expected at least {offset + chunk_size} bytes, found {current_size})"
+            )
+
         bytes_sent_this_attempt = 0
 
         async def _streaming_body():
             """
-            Async generator that yields chunks and tracks bytes sent.
+            Stream the part body from disk in small chunks to bound memory.
             """
             nonlocal bytes_sent_this_attempt
-            sent = 0
-            while sent < len(data):
-                end = min(sent + STREAM_CHUNK_SIZE, len(data))
-                yield data[sent:end]
-                chunk_len = end - sent
-                if progress:
-                    progress.advance_file(filename, chunk_len)
-                bytes_sent_this_attempt += chunk_len
-                sent = end
+            with open(file_path, "rb") as f:
+                f.seek(offset)
+                remaining = chunk_size
+                while remaining > 0:
+                    buf = f.read(min(STREAM_CHUNK_SIZE, remaining))
+                    if not buf:
+                        # Truncated mid-stream after the pre-flight check passed.
+                        raise UploadError(
+                            f"file {file_path} truncated during upload ({remaining} bytes short)"
+                        )
+                    yield buf
+                    if progress:
+                        progress.advance_file(filename, len(buf))
+                    bytes_sent_this_attempt += len(buf)
+                    remaining -= len(buf)
 
         try:
             response = await upload_client.put(
                 upload_url,
                 content=_streaming_body(),
-                headers={"Content-Length": str(len(data))},
+                headers={"Content-Length": str(chunk_size)},
             )
             response.raise_for_status()
             return response.headers.get("ETag", "")
@@ -395,10 +405,15 @@ async def upload_resource(
     file_sem = asyncio.Semaphore(config.upload.parallel_files)
     failed_files: list[str] = []
 
+    # Cap concurrent connections to avoid overwhelming the system
+    max_conns = min(
+        config.upload.parallel_files * config.upload.parallel_parts, MAX_UPLOAD_CONNECTIONS
+    )
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(300.0),
         limits=httpx.Limits(
-            max_connections=config.upload.parallel_files * config.upload.parallel_parts
+            max_connections=max_conns,
+            max_keepalive_connections=max_conns,
         ),
     ) as upload_client:
 

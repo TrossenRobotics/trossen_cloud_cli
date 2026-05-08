@@ -14,8 +14,8 @@ class UploadConfig(BaseModel):
     """
 
     chunk_size_mb: int = 50
-    parallel_parts: int = 6
-    parallel_files: int = 32
+    parallel_parts: int = 8
+    parallel_files: int = 64
 
 
 class DownloadConfig(BaseModel):

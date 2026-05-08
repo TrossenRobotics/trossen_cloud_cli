@@ -114,7 +114,10 @@ async def download_resource(
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=30.0),
-            limits=httpx.Limits(max_connections=config.download.parallel_files),
+            limits=httpx.Limits(
+                max_connections=config.download.parallel_files,
+                max_keepalive_connections=config.download.parallel_files,
+            ),
         ) as download_client:
             if show_progress:
                 total_size = sum(f["size_bytes"] for f in raw_files)

@@ -25,8 +25,8 @@ def test_default_config():
     config = Config()
 
     assert config.upload.chunk_size_mb == 50
-    assert config.upload.parallel_parts == 6
-    assert config.upload.parallel_files == 32
+    assert config.upload.parallel_parts == 8
+    assert config.upload.parallel_files == 64
     assert config.download.parallel_files == 16
 
 
@@ -83,7 +83,7 @@ class TestConfigShow:
     def test_show_displays_defaults(self):
         result = runner.invoke(app, ["config", "show"])
         assert "50" in result.stdout  # default chunk_size_mb
-        assert "6" in result.stdout  # default parallel_parts
+        assert "8" in result.stdout  # default parallel_parts
 
 
 class TestConfigSet:

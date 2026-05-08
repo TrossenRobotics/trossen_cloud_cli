@@ -210,6 +210,11 @@ async def upload_part(
             )
             response.raise_for_status()
             return response.headers.get("ETag", "")
+        except UploadError:
+            # Truncation isn't recoverable; rewind progress and bail without retrying.
+            if progress and bytes_sent_this_attempt > 0:
+                progress.advance_file(filename, -bytes_sent_this_attempt)
+            raise
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.HTTPStatusError) as e:
             if isinstance(e, httpx.HTTPStatusError) and e.response.status_code < 500:
                 raise
@@ -227,6 +232,7 @@ async def _upload_file_parts(
     upload_client: httpx.AsyncClient,
     file_path: str,
     local_path: Path,
+    file_size: int,
     part_urls: dict[int, str],
     part_size: int,
     progress: TransferProgress | None = None,
@@ -238,6 +244,9 @@ async def _upload_file_parts(
     :param upload_client: Shared async HTTP client for storage requests.
     :param file_path: The relative path of the file within the resource.
     :param local_path: The local filesystem path to the file.
+    :param file_size: The expected size in bytes (from the FileInfo captured at collection
+        time, used to generate the presigned URLs). The pre-flight truncation check inside
+        upload_part compares against this declared size, not a fresh stat.
     :param part_urls: Mapping of part_number -> presigned URL.
     :param part_size: Size of each part in bytes.
     :param progress: Optional progress tracker for UI updates.
@@ -245,7 +254,6 @@ async def _upload_file_parts(
 
     """
     config = get_config()
-    file_size = local_path.stat().st_size
     semaphore = asyncio.Semaphore(config.upload.parallel_parts)
 
     # Filter out parts that have already been uploaded (resume support)
@@ -452,6 +460,7 @@ async def upload_resource(
                             upload_client,
                             fp,
                             actual_path,
+                            file_info.size_bytes,
                             part_urls_map,
                             part_size,
                             progress,

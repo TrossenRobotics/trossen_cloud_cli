@@ -73,6 +73,20 @@ async def download_file(
         progress.complete_file(filename)
 
 
+def _write_inline_file(local_path: Path, content: str) -> None:
+    """
+    Write a file whose contents were inlined in the download-urls response.
+
+    The backend inlines small JSON artifacts it rewrites at serve time (e.g. PEFT
+    adapter configs with a co-located base path); for those, ``download_url`` is
+    null and the rendered body comes back in ``content``.
+    """
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    if local_path.is_symlink():
+        raise DownloadError(f"Refusing to write to symlink: {local_path}")
+    local_path.write_text(content)
+
+
 async def download_resource(
     resource_id: str,
     resource_type: str,
@@ -95,14 +109,12 @@ async def download_resource(
         if not raw_files:
             raise DownloadError("No files to download")
 
-        # Transform FileDownloadInfo array to path->url mapping
-        files: dict[str, str] = {f["path"]: f["download_url"] for f in raw_files}
-
         output_dir.mkdir(parents=True, exist_ok=True)
         resolved_output = output_dir.resolve()
 
         # Validate all file paths before downloading anything
-        for file_path in files:
+        for f in raw_files:
+            file_path = f["path"]
             if file_path.startswith("/"):
                 raise DownloadError(f"Absolute path not allowed: {file_path}")
             resolved = (resolved_output / file_path).resolve()
@@ -112,6 +124,27 @@ async def download_resource(
                     f"output directory: {file_path}"
                 )
 
+        # Partition by transport. Inline files carry their bytes in the response
+        # body (no S3 round-trip); URL files stream from a presigned S3 URL.
+        inline_files = [f for f in raw_files if f.get("content") is not None]
+        url_files = [f for f in raw_files if f.get("content") is None]
+        missing_url = [f["path"] for f in url_files if not f.get("download_url")]
+        if missing_url:
+            raise DownloadError(f"Response has no content and no download_url for: {missing_url}")
+
+        # Inline files are small JSON; write them up front rather than spinning up
+        # a download worker per file. Count them in the summary so totals match the
+        # full asset.
+        for f in inline_files:
+            _write_inline_file(output_dir / f["path"], f["content"])
+
+        total_size = sum(f["size_bytes"] for f in raw_files)
+
+        if not url_files:
+            if show_progress:
+                _print_download_summary(len(raw_files), total_size, 0.0)
+            return
+
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=30.0),
             limits=httpx.Limits(
@@ -120,12 +153,18 @@ async def download_resource(
             ),
         ) as download_client:
             if show_progress:
-                total_size = sum(f["size_bytes"] for f in raw_files)
                 with TransferProgress(
                     "Downloading", max_visible_files=min(config.download.parallel_files, 8)
                 ) as progress:
+                    # Count inline files in the progress total so the live bar matches
+                    # the final summary. Inline files are already on disk by this
+                    # point; register-then-complete each one to bump the byte counter
+                    # and file counter without showing them in the active list.
                     progress.set_total_size(total_size)
                     progress.set_total_files(len(raw_files))
+                    for f in inline_files:
+                        progress.add_file(f["path"], f["size_bytes"])
+                        progress.complete_file(f["path"])
 
                     semaphore = asyncio.Semaphore(config.download.parallel_files)
 
@@ -138,7 +177,9 @@ async def download_resource(
                                 download_client, url, local_path, file_path, progress, chunk_size
                             )
 
-                    tasks = [download_with_semaphore(path, url) for path, url in files.items()]
+                    tasks = [
+                        download_with_semaphore(f["path"], f["download_url"]) for f in url_files
+                    ]
                     await asyncio.gather(*tasks)
 
                     elapsed = progress.elapsed_seconds
@@ -155,7 +196,7 @@ async def download_resource(
                             download_client, url, local_path, file_path, None, chunk_size
                         )
 
-                tasks = [download_with_semaphore(path, url) for path, url in files.items()]
+                tasks = [download_with_semaphore(f["path"], f["download_url"]) for f in url_files]
                 await asyncio.gather(*tasks)
 
 

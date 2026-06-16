@@ -140,13 +140,19 @@ class PartUploadResponse(BaseModel):
 class FileDownloadInfo(BaseModel):
     """
     Information about a single downloadable file.
+
+    Files come in two flavors: small JSON artifacts the backend serves inline via
+    ``content`` (with ``download_url``/``expires_at`` null), and larger objects served
+    via a presigned S3 ``download_url``. Exactly one of ``content`` or
+    ``download_url`` is populated.
     """
 
     path: str
     size_bytes: int
     content_type: str
-    download_url: str
-    expires_at: str
+    download_url: str | None = None
+    expires_at: str | None = None
+    content: str | None = None
 
 
 class StoredToken(BaseModel):

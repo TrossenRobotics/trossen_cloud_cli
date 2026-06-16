@@ -676,3 +676,127 @@ class TestDownloadEndpoints:
                 await download_resource("ds-1", "datasets", Path("/tmp/out"), show_progress=False)
 
         dl_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_download_writes_inline_content_without_s3_fetch(self, tmp_path):
+        """
+        Files with non-null ``content`` are written to disk from the response body and
+        never get a download_file call. The backend uses this path for small JSON
+        artifacts it rewrites at serve time (e.g. PEFT adapter configs with a
+        co-located base path) where ``download_url`` comes back null.
+        """
+        from trossen_cloud_cli.download import download_resource
+
+        inline_body = '{"base_model_name_or_path": "base"}'
+        response = {
+            "resource_id": "m-1",
+            "files": [
+                {
+                    "path": "pretrained_model/adapter_config.json",
+                    "size_bytes": len(inline_body),
+                    "content_type": "application/json",
+                    "download_url": None,
+                    "expires_at": None,
+                    "content": inline_body,
+                },
+            ],
+            "total_size_bytes": len(inline_body),
+            "file_count": 1,
+            "expires_at": "2024-01-01T01:00:00Z",
+        }
+
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+        ):
+            get_mock.return_value = response
+            await download_resource("m-1", "models", tmp_path, show_progress=False)
+
+        dl_mock.assert_not_called()
+        written = tmp_path / "pretrained_model" / "adapter_config.json"
+        assert written.read_text() == inline_body
+
+    @pytest.mark.asyncio
+    async def test_download_handles_mixed_inline_and_url_files(self, tmp_path):
+        """
+        Inline files write directly; URL files still go through download_file.
+        """
+        from trossen_cloud_cli.download import download_resource
+
+        inline_body = '{"k": "v"}'
+        response = {
+            "resource_id": "m-1",
+            "files": [
+                {
+                    "path": "config.json",
+                    "size_bytes": len(inline_body),
+                    "content_type": "application/json",
+                    "download_url": None,
+                    "expires_at": None,
+                    "content": inline_body,
+                },
+                {
+                    "path": "weights.safetensors",
+                    "size_bytes": 1024,
+                    "content_type": "application/octet-stream",
+                    "download_url": "https://storage.example.com/weights.safetensors?presigned",
+                    "expires_at": "2024-01-01T01:00:00Z",
+                    "content": None,
+                },
+            ],
+            "total_size_bytes": 1024 + len(inline_body),
+            "file_count": 2,
+            "expires_at": "2024-01-01T01:00:00Z",
+        }
+
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+        ):
+            get_mock.return_value = response
+            await download_resource("m-1", "models", tmp_path, show_progress=False)
+
+        assert (tmp_path / "config.json").read_text() == inline_body
+        assert dl_mock.call_count == 1
+        assert dl_mock.call_args_list[0].args[1] == (
+            "https://storage.example.com/weights.safetensors?presigned"
+        )
+
+    @pytest.mark.asyncio
+    async def test_download_rejects_file_with_no_url_and_no_content(self, tmp_path):
+        """
+        A file entry that has neither ``download_url`` nor ``content`` is unserveable;
+        fail loudly rather than blowing up downstream in httpx with a cryptic
+        ``Invalid type for url`` error.
+        """
+        from trossen_cloud_cli.download import DownloadError, download_resource
+
+        response = {
+            "resource_id": "m-1",
+            "files": [
+                {
+                    "path": "broken.bin",
+                    "size_bytes": 0,
+                    "content_type": "application/octet-stream",
+                    "download_url": None,
+                    "expires_at": None,
+                    "content": None,
+                },
+            ],
+            "total_size_bytes": 0,
+            "file_count": 1,
+            "expires_at": "2024-01-01T01:00:00Z",
+        }
+
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch("trossen_cloud_cli.api_client.ApiClient.get", new_callable=AsyncMock) as get_mock,
+            patch("trossen_cloud_cli.download.download_file", new_callable=AsyncMock) as dl_mock,
+        ):
+            get_mock.return_value = response
+            with pytest.raises(DownloadError, match="no content and no download_url"):
+                await download_resource("m-1", "models", tmp_path, show_progress=False)
+
+        dl_mock.assert_not_called()

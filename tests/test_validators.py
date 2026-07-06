@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from trossen_cloud_cli.cli import app
 from trossen_cloud_cli.types import DatasetType
-from trossen_cloud_cli.validators import validate_dataset
+from trossen_cloud_cli.validators import detect_dataset_type, validate_dataset
 from trossen_cloud_cli.validators.lerobot import validate_lerobot
 from trossen_cloud_cli.validators.mcap import MCAP_MAGIC, validate_mcap
 
@@ -159,6 +159,56 @@ class TestValidateDataset:
         ds = _make_valid_mcap_dataset(tmp_path)
         warnings = validate_dataset(ds, DatasetType.TROSSENMCAP)
         assert warnings == []
+
+
+# ── Detection tests ─────────────────────────────────────────────────────────
+
+
+class TestDetectDatasetType:
+    def test_detects_lerobot_from_meta_info(self, tmp_path):
+        ds = _make_valid_lerobot(tmp_path)
+        assert detect_dataset_type(ds) == DatasetType.LEROBOT_V3
+
+    def test_detects_mcap_from_directory(self, tmp_path):
+        ds = _make_valid_mcap_dataset(tmp_path)
+        assert detect_dataset_type(ds) == DatasetType.TROSSENMCAP
+
+    def test_detects_mcap_from_single_file(self, tmp_path):
+        f = tmp_path / "episode_000000.mcap"
+        _make_valid_mcap_file(f)
+        assert detect_dataset_type(f) == DatasetType.TROSSENMCAP
+
+    def test_returns_none_for_empty_directory(self, tmp_path):
+        assert detect_dataset_type(tmp_path) is None
+
+    def test_returns_none_for_nonexistent_path(self, tmp_path):
+        assert detect_dataset_type(tmp_path / "nope") is None
+
+    def test_lerobot_takes_priority_over_mcap(self, tmp_path):
+        """If both meta/info.json and .mcap files exist, detect lerobot_v3."""
+        ds = _make_valid_lerobot(tmp_path)
+        _make_valid_mcap_file(ds / "episode_000000.mcap")
+        assert detect_dataset_type(ds) == DatasetType.LEROBOT_V3
+
+    def test_ignores_mcap_in_hidden_directories(self, tmp_path):
+        """Files under hidden dirs (.git, .cache, ...) must not trigger detection,
+        since upload skips them. Otherwise the user would be told the dataset is
+        TROSSENMCAP based on files that won't actually be uploaded.
+        """
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        hidden = ds / ".cache"
+        hidden.mkdir()
+        _make_valid_mcap_file(hidden / "episode_000000.mcap")
+        assert detect_dataset_type(ds) is None
+
+    def test_returns_none_for_hidden_single_mcap_file(self, tmp_path):
+        """A directly-passed hidden .mcap (e.g. .foo.mcap) must not be detected,
+        since collect_files would skip it and upload would then fail with
+        'No files found to upload'."""
+        f = tmp_path / ".hidden.mcap"
+        _make_valid_mcap_file(f)
+        assert detect_dataset_type(f) is None
 
 
 # ── LeRobot v3 validator tests ───────────────────────────────────────────────
@@ -604,6 +654,44 @@ class TestForceFlag:
             assert result.exit_code == 0
             upload_mock.assert_called_once()
 
+    def test_upload_auto_detects_type(self, tmp_path):
+        """Without --type, the CLI auto-detects the dataset type from contents."""
+        ds = _make_valid_mcap_dataset(tmp_path)
+        upload_result = {"id": "ds-123", "name": "test"}
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch(
+                "trossen_cloud_cli.commands.datasets.validate_dataset",
+                return_value=[],
+            ),
+            patch(
+                "trossen_cloud_cli.commands.datasets.create_and_upload_dataset",
+                return_value=upload_result,
+            ) as upload_mock,
+        ):
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test"],
+            )
+            assert result.exit_code == 0
+            assert "Detected dataset type: trossenmcap" in result.output
+            upload_mock.assert_called_once()
+            assert upload_mock.call_args.kwargs["dataset_type"] == "trossenmcap"
+
+    def test_upload_auto_detect_fails_for_unrecognizable_dir(self, tmp_path):
+        """Auto-detection fails with a clear error when the directory has files
+        but none match a known dataset type."""
+        ds = tmp_path / "unrecognizable"
+        ds.mkdir()
+        (ds / "random.txt").write_text("hello")
+        with patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN):
+            result = runner.invoke(
+                app,
+                ["dataset", "upload", str(ds), "--name", "test"],
+            )
+            assert result.exit_code == 1
+            assert "could not detect" in result.output.lower()
+
     def test_upload_no_force_prompts_and_aborts(self, tmp_path):
         """Without --force, validation warnings trigger a prompt; 'n' aborts."""
         ds = _make_valid_mcap_dataset(tmp_path)
@@ -624,3 +712,34 @@ class TestForceFlag:
             )
             assert result.exit_code == 0
             upload_mock.assert_not_called()
+
+    def test_import_hf_auto_detects_type(self, tmp_path):
+        """import-hf auto-detects type from downloaded content when --type is omitted."""
+        # _make_valid_lerobot creates a "dataset" subdir, and snapshot_download
+        # returns the path to the downloaded content, so we use that subdir.
+        download_dir = _make_valid_lerobot(tmp_path)
+
+        upload_result = {"id": "ds-456", "name": "my-dataset"}
+        with (
+            patch("trossen_cloud_cli.auth.get_token", return_value=MOCK_TOKEN),
+            patch(
+                "huggingface_hub.snapshot_download",
+                return_value=str(download_dir),
+            ),
+            patch(
+                "trossen_cloud_cli.commands.datasets.validate_dataset",
+                return_value=[],
+            ),
+            patch(
+                "trossen_cloud_cli.commands.datasets.create_and_upload_dataset",
+                return_value=upload_result,
+            ) as upload_mock,
+        ):
+            result = runner.invoke(
+                app,
+                ["dataset", "import-hf", "org/my-dataset", "--name", "my-dataset", "--force"],
+            )
+            assert result.exit_code == 0
+            assert "lerobot_v3" in result.output
+            upload_mock.assert_called_once()
+            assert upload_mock.call_args.kwargs["dataset_type"] == "lerobot_v3"

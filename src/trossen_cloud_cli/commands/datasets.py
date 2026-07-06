@@ -17,9 +17,22 @@ from ..download import download_dataset
 from ..output import console, print_error, print_info, print_success, print_warning
 from ..types import DatasetType, PrivacyLevel
 from ..upload import UploadError, create_and_upload_dataset
-from ..validators import validate_dataset
+from ..validators import detect_dataset_type, validate_dataset
 
 app = typer.Typer(help="Manage datasets")
+
+
+def _resolve_dataset_type(path: Path, dataset_type: DatasetType | None) -> DatasetType:
+    """Auto-detect dataset type if not provided, or exit with an error."""
+    if dataset_type is not None:
+        return dataset_type
+    detected = detect_dataset_type(path)
+    if detected is None:
+        valid = ", ".join(dt.value for dt in DatasetType)
+        print_error(f"Could not detect dataset type. Use --type to specify ({valid}).")
+        raise typer.Exit(1)
+    print_info(f"Detected dataset type: {detected.value}")
+    return detected
 
 
 def is_user_name_format(identifier: str) -> bool:
@@ -56,9 +69,9 @@ def upload(
         typer.Option("--name", "-n", help="Dataset name"),
     ],
     dataset_type: Annotated[
-        DatasetType,
-        typer.Option("--type", "-t", help="Dataset type"),
-    ],
+        DatasetType | None,
+        typer.Option("--type", "-t", help="Dataset type (auto-detected if omitted)"),
+    ] = None,
     privacy: Annotated[
         PrivacyLevel,
         typer.Option("--privacy", "-p", help="Privacy level"),
@@ -76,6 +89,8 @@ def upload(
     Upload a dataset to Trossen Cloud.
     """
     require_auth()
+
+    dataset_type = _resolve_dataset_type(path, dataset_type)
 
     # Parse metadata if provided
     metadata_dict = None
@@ -150,9 +165,9 @@ def import_hf(
         typer.Option("--name", "-n", help="Dataset name (defaults to HF repo name)"),
     ] = None,
     dataset_type: Annotated[
-        DatasetType,
-        typer.Option("--type", "-t", help="Dataset type"),
-    ] = DatasetType.LEROBOT_V3,
+        DatasetType | None,
+        typer.Option("--type", "-t", help="Dataset type (auto-detected if omitted)"),
+    ] = None,
     privacy: Annotated[
         PrivacyLevel,
         typer.Option("--privacy", "-p", help="Privacy level"),
@@ -221,6 +236,8 @@ def import_hf(
         )
 
         print_success(f"Downloaded to {local_path}")
+
+        dataset_type = _resolve_dataset_type(local_path, dataset_type)
 
         # Validate dataset before upload
         validation_warnings = validate_dataset(local_path, dataset_type)

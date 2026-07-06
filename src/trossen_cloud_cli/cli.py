@@ -52,7 +52,7 @@ USAGE_TEXT = """\
 
 [bold]Datasets:[/bold]
 
-  trc dataset upload ./my-data --name my-dataset --type lerobot_v3
+  trc dataset upload ./my-data --name my-dataset
   trc dataset import-hf org/dataset-name --name my-dataset
   trc dataset download <dataset-id> ./output
   trc dataset list --mine

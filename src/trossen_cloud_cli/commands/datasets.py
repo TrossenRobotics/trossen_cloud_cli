@@ -22,14 +22,47 @@ from ..validators import detect_dataset_type, validate_dataset
 app = typer.Typer(help="Manage datasets")
 
 
+_TYPE_ALIASES = {"lerobot": "lerobot_v3", "mcap": "trossenmcap"}
+
+
+def _valid_type_names() -> str:
+    """Comma-separated list of accepted --type values (canonical names + aliases)."""
+    return ", ".join([*DatasetType, *_TYPE_ALIASES])
+
+
+_DatasetTypeOption = Annotated[
+    str | None,
+    typer.Option(
+        "--type",
+        "-t",
+        help=f"Dataset type ({_valid_type_names()}). Auto-detected if omitted.",
+    ),
+]
+
+
+def _parse_dataset_type(value: str | None) -> DatasetType | None:
+    """Parse a --type string into a DatasetType, resolving aliases (case-insensitive)."""
+    if value is None:
+        return None
+    lower = value.lower()
+    resolved = _TYPE_ALIASES.get(lower, lower)
+    try:
+        return DatasetType(resolved)
+    except ValueError:
+        raise typer.BadParameter(
+            f"Invalid dataset type '{value}'. Valid: {_valid_type_names()}"
+        ) from None
+
+
 def _resolve_dataset_type(path: Path, dataset_type: DatasetType | None) -> DatasetType:
     """Auto-detect dataset type if not provided, or exit with an error."""
     if dataset_type is not None:
         return dataset_type
     detected = detect_dataset_type(path)
     if detected is None:
-        valid = ", ".join(dt.value for dt in DatasetType)
-        print_error(f"Could not detect dataset type. Use --type to specify ({valid}).")
+        print_error(
+            f"Could not detect dataset type. Use --type to specify ({_valid_type_names()})."
+        )
         raise typer.Exit(1)
     print_info(f"Detected dataset type: {detected.value}")
     return detected
@@ -68,10 +101,7 @@ def upload(
         str,
         typer.Option("--name", "-n", help="Dataset name"),
     ],
-    dataset_type: Annotated[
-        DatasetType | None,
-        typer.Option("--type", "-t", help="Dataset type (auto-detected if omitted)"),
-    ] = None,
+    dataset_type_str: _DatasetTypeOption = None,
     privacy: Annotated[
         PrivacyLevel,
         typer.Option("--privacy", "-p", help="Privacy level"),
@@ -88,9 +118,9 @@ def upload(
     """
     Upload a dataset to Trossen Cloud.
     """
+    parsed_type = _parse_dataset_type(dataset_type_str)
     require_auth()
-
-    dataset_type = _resolve_dataset_type(path, dataset_type)
+    dataset_type = _resolve_dataset_type(path, parsed_type)
 
     # Parse metadata if provided
     metadata_dict = None
@@ -164,10 +194,7 @@ def import_hf(
         str | None,
         typer.Option("--name", "-n", help="Dataset name (defaults to HF repo name)"),
     ] = None,
-    dataset_type: Annotated[
-        DatasetType | None,
-        typer.Option("--type", "-t", help="Dataset type (auto-detected if omitted)"),
-    ] = None,
+    dataset_type_str: _DatasetTypeOption = None,
     privacy: Annotated[
         PrivacyLevel,
         typer.Option("--privacy", "-p", help="Privacy level"),
@@ -197,6 +224,7 @@ def import_hf(
     from huggingface_hub import snapshot_download
     from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
 
+    parsed_type = _parse_dataset_type(dataset_type_str)
     require_auth()
 
     repo_id = _parse_hf_repo_id(repo)
@@ -237,7 +265,7 @@ def import_hf(
 
         print_success(f"Downloaded to {local_path}")
 
-        dataset_type = _resolve_dataset_type(local_path, dataset_type)
+        dataset_type = _resolve_dataset_type(local_path, parsed_type)
 
         # Validate dataset before upload
         validation_warnings = validate_dataset(local_path, dataset_type)

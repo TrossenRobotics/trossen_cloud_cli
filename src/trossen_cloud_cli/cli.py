@@ -52,6 +52,7 @@ USAGE_TEXT = """\
 
 [bold]Datasets:[/bold]
 
+  trc dataset validate ./my-data
   trc dataset upload ./my-data --name my-dataset
   trc dataset import-hf org/dataset-name --name my-dataset
   trc dataset download <dataset-id> ./output

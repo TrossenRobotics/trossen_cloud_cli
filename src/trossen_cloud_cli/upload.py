@@ -569,7 +569,7 @@ async def create_and_upload_dataset(
 
     :param name: The name for the new dataset.
     :param local_path: Path to the file or directory to upload.
-    :param dataset_type: The type of dataset (e.g., 'lerobot').
+    :param dataset_type: The type of dataset (e.g., 'lerobot_v3').
     :param privacy: Privacy setting ('public' or 'private').
     :param metadata: Optional additional metadata for the dataset.
     :param show_progress: Whether to display upload progress. Defaults to True.

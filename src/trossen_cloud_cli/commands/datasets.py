@@ -11,7 +11,7 @@ from typing import Annotated
 import typer
 from rich.table import Table
 
-from ..api_client import ApiClient, ApiError
+from ..api_client import API_BASE_URL, ApiClient, ApiError
 from ..auth import require_auth
 from ..download import download_dataset
 from ..output import console, print_error, print_info, print_success, print_warning
@@ -23,6 +23,21 @@ app = typer.Typer(help="Manage datasets")
 
 
 _TYPE_ALIASES = {"lerobot": "lerobot_v3", "mcap": "trossenmcap"}
+
+
+def _dataset_web_url(dataset_id: str) -> str:
+    """Build the web app URL for a dataset from the configured API base URL.
+
+    The frontend is served from the same origin as the API, so strip the ``/api/v1``
+    suffix off the base URL and append the dataset detail route.
+
+    :param dataset_id: The dataset's UUID.
+    :return: The browser URL for the dataset detail page.
+    """
+    origin = API_BASE_URL.rstrip("/")
+    if origin.endswith("/api/v1"):
+        origin = origin[: -len("/api/v1")]
+    return f"{origin}/datasets/{dataset_id}"
 
 
 def _valid_type_names() -> str:
@@ -155,6 +170,7 @@ def upload(
         )
         console.print(f"[bold]ID:[/bold]   {dataset['id']}")
         console.print(f"[bold]Name:[/bold] {name}")
+        console.print(f"[bold]URL:[/bold]  {_dataset_web_url(dataset['id'])}")
 
     except KeyboardInterrupt:
         raise typer.Exit(1)
@@ -291,6 +307,7 @@ def import_hf(
         )
         console.print(f"[bold]ID:[/bold]   {dataset['id']}")
         console.print(f"[bold]Name:[/bold] {dataset_name}")
+        console.print(f"[bold]URL:[/bold]  {_dataset_web_url(dataset['id'])}")
 
     except RepositoryNotFoundError:
         print_error(f"HuggingFace dataset '{repo_id}' not found")

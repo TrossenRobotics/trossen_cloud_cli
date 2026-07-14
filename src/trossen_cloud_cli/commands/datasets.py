@@ -14,9 +14,20 @@ from rich.table import Table
 from ..api_client import ApiClient, ApiError
 from ..auth import require_auth
 from ..download import download_dataset
-from ..output import console, print_error, print_info, print_success, print_warning
+from ..output import (
+    console,
+    format_size,
+    print_error,
+    print_info,
+    print_success,
+    print_warning,
+)
 from ..types import DatasetType, PrivacyLevel
-from ..upload import UploadError, create_and_upload_dataset
+from ..upload import (
+    UploadError,
+    add_episodes_to_dataset,
+    create_and_upload_dataset,
+)
 from ..validators import detect_dataset_type, validate_dataset
 
 app = typer.Typer(help="Manage datasets")
@@ -85,6 +96,51 @@ async def resolve_dataset_identifier(client: ApiClient, identifier: str) -> dict
     else:
         # UUID format
         return await client.get(f"/datasets/{identifier}")
+
+
+async def _fetch_all_episodes(client: ApiClient, dataset_id: str) -> list[dict]:
+    """
+    Page through the episodes endpoint and return every episode.
+
+    The list endpoint caps ``limit`` at 200 per request, so a dataset with more
+    than 200 episodes cannot be listed in a single call. This pages through with
+    ``offset`` until the full list is collected. Callers that resolve filenames
+    to episode ids must see the complete list, or episodes past the first page
+    would be silently mis-reported as missing.
+
+    :param client: The authenticated API client.
+    :param dataset_id: The resolved dataset UUID.
+    :return: All episode dicts across every page.
+
+    """
+    items: list[dict] = []
+    offset = 0
+    while True:
+        page = await client.get(
+            f"/datasets/{dataset_id}/episodes", params={"limit": 200, "offset": offset}
+        )
+        batch = page.get("items", [])
+        items.extend(batch)
+        total = page.get("total")
+        if len(batch) < 200 or (total is not None and len(items) >= total):
+            break
+        offset += 200
+    return items
+
+
+def _episode_basename(name: str) -> str:
+    """
+    Canonical episode identifier for matching.
+
+    Strips any directory prefix and a trailing ``.mcap`` so that both
+    ``episode_000042.mcap`` and ``episode_000042`` map to the same key.
+
+    :param name: An episode filename, path, or bare basename.
+    :return: The canonical basename used to match against ``source_key``.
+
+    """
+    base = name.rsplit("/", 1)[-1]
+    return base[:-5] if base.endswith(".mcap") else base
 
 
 @app.command("upload")
@@ -161,6 +217,209 @@ def upload(
     except UploadError as e:
         print_error(str(e))
         raise typer.Exit(1)
+
+
+@app.command("add-episodes")
+def add_episodes(
+    dataset_id: Annotated[
+        str,
+        typer.Argument(help="Dataset ID (UUID or <user>/<name>)"),
+    ],
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to the .mcap file or directory of new episodes",
+            exists=True,
+            resolve_path=True,
+        ),
+    ],
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip the validation confirmation prompt"),
+    ] = False,
+    cancel_in_progress: Annotated[
+        bool,
+        typer.Option(
+            "--cancel-in-progress",
+            help="If another edit is already in progress on this dataset, cancel it and retry "
+            "(this discards that edit — it may belong to another user or process)",
+        ),
+    ] = False,
+) -> None:
+    """
+    Add new episodes to an existing trossenmcap dataset.
+    """
+    require_auth()
+
+    # Validate the new files as trossenmcap (warn-only, same posture as `upload`).
+    # This sees only the new files, so a duplicate episode number is caught
+    # server-side (reopen 409 path_exists), not here.
+    validation_warnings = validate_dataset(path, DatasetType.TROSSENMCAP)
+    if validation_warnings:
+        console.print(
+            f"\n[warning]Found {len(validation_warnings)} validation warning(s):[/warning]"
+        )
+        for w in validation_warnings:
+            print_warning(w)
+        console.print()
+        if not force and not typer.confirm("Continue adding episodes?"):
+            raise typer.Exit(0)
+
+    def _confirm_abort() -> bool:
+        return cancel_in_progress or typer.confirm(
+            "An edit is already in progress. Cancel it and retry?"
+        )
+
+    async def _run() -> str:
+        async with ApiClient() as client:
+            actual_id = (await resolve_dataset_identifier(client, dataset_id))["id"]
+        await add_episodes_to_dataset(actual_id, path, on_edit_in_progress=_confirm_abort)
+        return actual_id
+
+    try:
+        actual_id = asyncio.run(_run())
+        console.print(f"[bold]ID:[/bold] {actual_id}")
+    except KeyboardInterrupt:
+        raise typer.Exit(1)
+    except UploadError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except ApiError as e:
+        print_error(e.message if isinstance(e.message, str) else "Failed to add episodes")
+        raise typer.Exit(1)
+
+
+@app.command("episodes")
+def episodes(
+    dataset_id: Annotated[
+        str,
+        typer.Argument(help="Dataset ID (UUID or <user>/<name>)"),
+    ],
+) -> None:
+    """
+    List episodes in a dataset.
+    """
+    require_auth()
+
+    async def fetch() -> list[dict]:
+        async with ApiClient() as client:
+            actual_id = (await resolve_dataset_identifier(client, dataset_id))["id"]
+            return await _fetch_all_episodes(client, actual_id)
+
+    try:
+        items = asyncio.run(fetch())
+    except ApiError as e:
+        print_error(e.message if isinstance(e.message, str) else "Failed to list episodes")
+        raise typer.Exit(1)
+
+    if not items:
+        print_info("No episodes found")
+        return
+
+    table = Table(title=f"Episodes ({len(items)})", show_edge=False)
+    table.add_column("#", justify="right")
+    table.add_column("Episode", style="bold")
+    table.add_column("Size", justify="right")
+    table.add_column("Duration")
+    table.add_column("Viz")
+    # Position is derived from sort order (display only); episodes are matched by
+    # filename, never by this index.
+    for i, ep in enumerate(items):
+        dur = ep.get("duration_seconds")
+        viz = ep.get("viz")
+        table.add_row(
+            str(i),
+            ep["source_key"],
+            format_size(ep.get("source_size_bytes") or 0),
+            f"{dur:.1f}s" if dur is not None else "-",
+            viz.get("status", "-") if isinstance(viz, dict) else "-",
+        )
+    console.print(table)
+
+
+@app.command("remove-episodes")
+def remove_episodes(
+    dataset_id: Annotated[
+        str,
+        typer.Argument(help="Dataset ID (UUID or <user>/<name>)"),
+    ],
+    episodes: Annotated[
+        list[str],
+        typer.Argument(help="Episode filename(s), e.g. episode_000042.mcap"),
+    ],
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip the removal confirmation"),
+    ] = False,
+) -> None:
+    """
+    Remove episodes from a trossenmcap dataset. This permanently deletes episode data.
+    """
+    require_auth()
+
+    # Normalize requested names to a canonical basename form for matching.
+    requested = [_episode_basename(e) for e in episodes]
+
+    async def _run() -> dict:
+        async with ApiClient() as client:
+            actual_id = (await resolve_dataset_identifier(client, dataset_id))["id"]
+            all_eps = await _fetch_all_episodes(client, actual_id)
+            by_name = {_episode_basename(ep["source_key"]): ep["id"] for ep in all_eps}
+
+            # Resolve + dedupe (a user may pass the same episode twice, or both the
+            # .mcap and bare form), preserving first-seen order.
+            matched_ids: list[str] = []
+            for n in requested:
+                if n in by_name and by_name[n] not in matched_ids:
+                    matched_ids.append(by_name[n])
+            unresolved = [orig for orig, n in zip(episodes, requested) if n not in by_name]
+
+            for name in unresolved:
+                print_warning(f"No episode matching '{name}' — skipping")
+            if not matched_ids:
+                raise UploadError("No matching episodes found to remove")
+
+            if len(matched_ids) > 200:
+                raise UploadError(
+                    f"{len(matched_ids)} episodes exceeds the 200-per-call limit; "
+                    "remove them in smaller batches"
+                )
+
+            if not force:
+                console.print(
+                    f"[warning]This permanently removes {len(matched_ids)} episode(s) "
+                    "and cannot be undone.[/warning]"
+                )
+                if not typer.confirm("Remove these episodes?"):
+                    raise typer.Exit(0)
+
+            return await client.post(
+                f"/datasets/{actual_id}/episodes/remove",
+                json={"episode_ids": matched_ids},
+            )
+
+    try:
+        resp = asyncio.run(_run())
+    except typer.Exit:
+        raise
+    except UploadError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except KeyboardInterrupt:
+        raise typer.Exit(1)
+    except ApiError as e:
+        print_error(e.message if isinstance(e.message, str) else "Failed to remove episodes")
+        raise typer.Exit(1)
+
+    print_success(f"Removed {len(resp.get('removed', []))} episode(s)")
+    if resp.get("not_found"):
+        # Server-side not_found (e.g. concurrent removal) — distinct from the
+        # client-side unresolved names warned above.
+        print_warning(f"{len(resp['not_found'])} episode(s) were already gone")
+    console.print(
+        f"[label]Remaining:[/label] {resp.get('file_count', '?')} files, "
+        f"{format_size(resp.get('total_size_bytes') or 0)}"
+    )
 
 
 def _parse_hf_repo_id(repo_id_or_url: str) -> str:

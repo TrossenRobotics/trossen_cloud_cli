@@ -2,6 +2,7 @@
 
 import asyncio
 import mimetypes
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -631,6 +632,109 @@ async def create_and_upload_dataset(
                 print_error(f"Upload failed: {e}")
                 print_info("Aborting upload...")
             await abort_upload(client, resource_id, "datasets")
+            raise
+
+
+def _reopen_error_code(e: ApiError) -> str | None:
+    """Extract the machine-readable ``code`` from a reopen error's nested detail."""
+    detail = e.details.get("detail") if isinstance(e.details, dict) else None
+    return detail.get("code") if isinstance(detail, dict) else None
+
+
+def _reopen_error_message(e: ApiError) -> str:
+    """Extract a human-readable message from a reopen error's nested detail."""
+    detail = e.details.get("detail") if isinstance(e.details, dict) else None
+    if isinstance(detail, dict) and detail.get("message"):
+        return str(detail["message"])
+    return e.message if isinstance(e.message, str) else "Reopen failed"
+
+
+async def add_episodes_to_dataset(
+    dataset_id: str,
+    local_path: Path,
+    show_progress: bool = True,
+    on_edit_in_progress: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    """
+    Add new episodes to an existing, finalized trossenmcap dataset.
+
+    Reopens the dataset for editing, uploads the new ``.mcap`` episode files using
+    the same multipart engine as create, and finalizes (which merges the new
+    episodes into the existing manifest because the dataset is already ready).
+
+    Only ``.mcap`` files are uploaded; any other files under ``local_path`` are
+    skipped and reported, so stray files never land in the episode manifest.
+
+    :param dataset_id: The ID of the existing dataset to add episodes to.
+    :param local_path: Path to a ``.mcap`` file or a directory of new episodes.
+    :param show_progress: Whether to display a progress bar. Defaults to True.
+    :param on_edit_in_progress: Optional callback invoked when reopen reports an
+        edit already in progress. Return True to abort the stale edit and retry
+        once; return False (or omit) to surface the error.
+    :return: The reopen response from the API.
+    :raises UploadError: If no ``.mcap`` files are found or reopen fails.
+    :raises ApiError: If API requests fail during upload.
+
+    """
+    all_files = collect_files(local_path)
+    files = [f for f in all_files if f.path.endswith(".mcap")]
+    skipped = [f.path for f in all_files if not f.path.endswith(".mcap")]
+    if not files:
+        raise UploadError("No .mcap episode files found to add")
+    if skipped:
+        print_warning(f"Skipping {len(skipped)} non-.mcap file(s): {', '.join(skipped)}")
+
+    async with ApiClient() as client:
+        # Reopen the dataset for editing, with one optional abort+retry if a
+        # stale edit still holds the lock.
+        resp: dict[str, Any] = {}
+        for attempt in (1, 2):
+            try:
+                resp = await client.post(
+                    f"/datasets/{dataset_id}/episodes/reopen",
+                    json={"files": [f.model_dump() for f in files]},
+                )
+                break
+            except ApiError as e:
+                if (
+                    attempt == 1
+                    and _reopen_error_code(e) == "edit_in_progress"
+                    and on_edit_in_progress
+                    and on_edit_in_progress()
+                ):
+                    # abort_upload also clears any stale local resume state, so the
+                    # retry always uploads against a fresh reopen (see §G3).
+                    await abort_upload(client, dataset_id, "datasets")
+                    continue
+                raise UploadError(_reopen_error_message(e))
+
+        try:
+            await upload_resource(
+                client,
+                dataset_id,
+                "datasets",
+                local_path,
+                files,
+                show_progress,
+                prefetched_urls=resp.get("upload_urls"),
+            )
+
+            try:
+                await client.post(f"/datasets/{dataset_id}/finalize")
+            except ApiError as e:
+                if "already finalized" not in str(e.message).lower():
+                    raise
+
+            return resp
+
+        except (Exception, KeyboardInterrupt, asyncio.CancelledError) as e:
+            is_cancelled = isinstance(e, (KeyboardInterrupt, asyncio.CancelledError))
+            if is_cancelled:
+                print_info("Stopping upload...")
+            else:
+                print_error(f"Upload failed: {e}")
+                print_info("Aborting upload...")
+            await abort_upload(client, dataset_id, "datasets")
             raise
 
 

@@ -53,6 +53,9 @@ USAGE_TEXT = """\
 [bold]Datasets:[/bold]
 
   trc dataset upload ./my-data --name my-dataset
+  trc dataset add-episodes <dataset-id> ./new-episodes
+  trc dataset episodes <dataset-id>
+  trc dataset remove-episodes <dataset-id> episode_000042.mcap
   trc dataset import-hf org/dataset-name --name my-dataset
   trc dataset download <dataset-id> ./output
   trc dataset list --mine

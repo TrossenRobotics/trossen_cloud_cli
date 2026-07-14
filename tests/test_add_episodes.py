@@ -123,6 +123,30 @@ async def test_mcap_filter(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_mcap_filter_case_insensitive(tmp_path):
+    """An uppercase .MCAP extension is still treated as an episode file."""
+    _write_episodes(tmp_path, ["episode_000042.MCAP", "notes.txt"])
+
+    reopen_bodies = []
+
+    async def mock_post(path, json=None):
+        if path.endswith("/episodes/reopen"):
+            reopen_bodies.append(json)
+            return _reopen_response()
+        return {}
+
+    with (
+        patch("trossen_cloud_cli.api_client.get_token", return_value=MOCK_TOKEN),
+        patch("trossen_cloud_cli.api_client.ApiClient.post", side_effect=mock_post),
+        patch("trossen_cloud_cli.upload.upload_resource", new=AsyncMock()),
+    ):
+        await add_episodes_to_dataset(DATASET_ID, tmp_path, show_progress=False)
+
+    paths = [f["path"] for f in reopen_bodies[0]["files"]]
+    assert paths == ["episode_000042.MCAP"]
+
+
+@pytest.mark.asyncio
 async def test_no_mcap_files(tmp_path):
     """A dir with no .mcap files raises before any reopen."""
     _write_episodes(tmp_path, ["notes.txt"])

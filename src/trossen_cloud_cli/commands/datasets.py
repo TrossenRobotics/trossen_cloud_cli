@@ -128,21 +128,35 @@ async def _fetch_all_episodes(client: ApiClient, dataset_id: str) -> list[dict]:
     return items
 
 
-def _episode_basename(name: str) -> str:
+def _canonical_episode_key(name: str) -> str:
     """
-    Canonical episode identifier for matching.
+    Canonical full key for matching, preserving any directory prefix.
 
-    Strips any directory prefix (POSIX ``/`` or Windows ``\\``) and a trailing
-    ``.mcap`` (case-insensitive) so that ``episode_000042.mcap``,
-    ``episode_000042``, and ``some\\dir\\episode_000042.MCAP`` all map to the
-    same key.
+    Normalizes Windows ``\\`` to POSIX ``/``, drops leading ``./`` and ``/``
+    segments, and strips a trailing ``.mcap`` (case-insensitive). Directories
+    are kept so ``a/episode_000001.mcap`` and ``b/episode_000001.mcap`` remain
+    distinct keys.
 
     :param name: An episode filename, path, or bare basename.
-    :return: The canonical basename used to match against ``source_key``.
+    :return: The normalized full key (e.g. ``a/episode_000001``).
 
     """
-    base = name.replace("\\", "/").rsplit("/", 1)[-1]
-    return base[:-5] if base.lower().endswith(".mcap") else base
+    s = name.replace("\\", "/")
+    while s.startswith("./"):
+        s = s[2:]
+    s = s.lstrip("/")
+    return s[:-5] if s.lower().endswith(".mcap") else s
+
+
+def _episode_basename(name: str) -> str:
+    """
+    Last path segment of the canonical key, used as an unambiguous fallback.
+
+    :param name: An episode filename, path, or bare basename.
+    :return: The final ``episode_NNNNNN`` segment.
+
+    """
+    return _canonical_episode_key(name).rsplit("/", 1)[-1]
 
 
 @app.command("upload")
@@ -359,25 +373,41 @@ def remove_episodes(
     """
     require_auth()
 
-    # Normalize requested names to a canonical basename form for matching.
-    requested = [_episode_basename(e) for e in episodes]
-
     async def _run() -> dict:
         async with ApiClient() as client:
             actual_id = (await resolve_dataset_identifier(client, dataset_id))["id"]
             all_eps = await _fetch_all_episodes(client, actual_id)
-            by_name = {_episode_basename(ep["source_key"]): ep["id"] for ep in all_eps}
 
-            # Resolve + dedupe (a user may pass the same episode twice, or both the
-            # .mcap and bare form), preserving first-seen order.
+            # Full-key map is unambiguous; basename map is the fallback but may
+            # collapse episodes that share a name across subdirectories.
+            by_key = {_canonical_episode_key(ep["source_key"]): ep["id"] for ep in all_eps}
+            by_basename: dict[str, list[str]] = {}
+            for ep in all_eps:
+                by_basename.setdefault(_episode_basename(ep["source_key"]), []).append(ep["id"])
+
+            # Resolve each requested name: exact full-key match wins; otherwise
+            # fall back to basename, but refuse (never guess) when a bare name
+            # maps to more than one episode. Dedupe, preserving first-seen order.
             matched_ids: list[str] = []
-            for n in requested:
-                if n in by_name and by_name[n] not in matched_ids:
-                    matched_ids.append(by_name[n])
-            unresolved = [orig for orig, n in zip(episodes, requested) if n not in by_name]
+            for orig in episodes:
+                key = _canonical_episode_key(orig)
+                if key in by_key:
+                    ep_id = by_key[key]
+                else:
+                    ids = by_basename.get(_episode_basename(orig), [])
+                    if len(ids) > 1:
+                        print_warning(
+                            f"'{orig}' matches {len(ids)} episodes in different "
+                            "subdirectories — specify the full path to disambiguate; skipping"
+                        )
+                        continue
+                    if not ids:
+                        print_warning(f"No episode matching '{orig}' — skipping")
+                        continue
+                    ep_id = ids[0]
+                if ep_id not in matched_ids:
+                    matched_ids.append(ep_id)
 
-            for name in unresolved:
-                print_warning(f"No episode matching '{name}' — skipping")
             if not matched_ids:
                 raise UploadError("No matching episodes found to remove")
 

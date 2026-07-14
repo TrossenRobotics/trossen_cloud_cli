@@ -677,8 +677,8 @@ async def add_episodes_to_dataset(
 
     """
     all_files = collect_files(local_path)
-    files = [f for f in all_files if f.path.endswith(".mcap")]
-    skipped = [f.path for f in all_files if not f.path.endswith(".mcap")]
+    files = [f for f in all_files if f.path.lower().endswith(".mcap")]
+    skipped = [f.path for f in all_files if not f.path.lower().endswith(".mcap")]
     if not files:
         raise UploadError("No .mcap episode files found to add")
     if skipped:

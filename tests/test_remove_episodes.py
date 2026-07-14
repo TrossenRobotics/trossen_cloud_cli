@@ -167,6 +167,34 @@ def test_remove_windows_path_and_case_resolves():
     assert post.await_args.kwargs["json"] == {"episode_ids": ["ep-42"]}
 
 
+def _nested_episode(subdir: str, idx: int, ep_id: str) -> dict:
+    ep = _episode(idx, ep_id)
+    ep["source_key"] = f"{subdir}/episode_{idx:06d}.mcap"
+    return ep
+
+
+def test_remove_ambiguous_basename_refused():
+    """A bare name matching episodes in two subdirs is refused, not guessed."""
+    items = [_nested_episode("a", 1, "ep-a1"), _nested_episode("b", 1, "ep-b1")]
+    result, post = _run_remove([DATASET_ID, "episode_000001", "--force"], items)
+    assert result.exit_code == 1
+    assert "matches 2 episodes" in result.stdout
+    assert "No matching episodes found" in result.stdout
+    post.assert_not_called()
+
+
+def test_remove_full_path_disambiguates():
+    """The full source_key path selects the specific episode among collisions."""
+    items = [_nested_episode("a", 1, "ep-a1"), _nested_episode("b", 1, "ep-b1")]
+    result, post = _run_remove(
+        [DATASET_ID, "b/episode_000001.mcap", "--force"],
+        items,
+        post_return={"removed": ["ep-b1"], "not_found": [], "file_count": 1, "total_size_bytes": 0},
+    )
+    assert result.exit_code == 0, result.stdout
+    assert post.await_args.kwargs["json"] == {"episode_ids": ["ep-b1"]}
+
+
 def test_remove_duplicate_input_deduped():
     items = [_episode(42, "ep-42")]
     result, post = _run_remove(

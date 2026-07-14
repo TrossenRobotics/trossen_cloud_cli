@@ -132,15 +132,17 @@ def _episode_basename(name: str) -> str:
     """
     Canonical episode identifier for matching.
 
-    Strips any directory prefix and a trailing ``.mcap`` so that both
-    ``episode_000042.mcap`` and ``episode_000042`` map to the same key.
+    Strips any directory prefix (POSIX ``/`` or Windows ``\\``) and a trailing
+    ``.mcap`` (case-insensitive) so that ``episode_000042.mcap``,
+    ``episode_000042``, and ``some\\dir\\episode_000042.MCAP`` all map to the
+    same key.
 
     :param name: An episode filename, path, or bare basename.
     :return: The canonical basename used to match against ``source_key``.
 
     """
-    base = name.rsplit("/", 1)[-1]
-    return base[:-5] if base.endswith(".mcap") else base
+    base = name.replace("\\", "/").rsplit("/", 1)[-1]
+    return base[:-5] if base.lower().endswith(".mcap") else base
 
 
 @app.command("upload")

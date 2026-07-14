@@ -155,6 +155,18 @@ def test_remove_bare_form_resolves():
     assert post.await_args.kwargs["json"] == {"episode_ids": ["ep-42"]}
 
 
+def test_remove_windows_path_and_case_resolves():
+    """A Windows-style path and uppercase .MCAP still resolve to the source_key."""
+    items = [_episode(42, "ep-42")]
+    result, post = _run_remove(
+        [DATASET_ID, "subdir\\episode_000042.MCAP", "--force"],
+        items,
+        post_return={"removed": ["ep-42"], "not_found": [], "file_count": 0, "total_size_bytes": 0},
+    )
+    assert result.exit_code == 0, result.stdout
+    assert post.await_args.kwargs["json"] == {"episode_ids": ["ep-42"]}
+
+
 def test_remove_duplicate_input_deduped():
     items = [_episode(42, "ep-42")]
     result, post = _run_remove(

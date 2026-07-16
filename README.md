@@ -58,7 +58,7 @@ trc dataset add-episodes <dataset-id> ./episode_000042.mcap
 trc dataset add-episodes <dataset-id> ./new-episodes/
 
 # If another edit is already in progress on the dataset, cancel it and retry
-# (this discards that edit, which may belong to another user or process)
+# (this discards that edit, which may belong to another process or session)
 trc dataset add-episodes <dataset-id> ./new-episodes/ --cancel-in-progress
 
 # Remove episodes from a dataset (by filename)

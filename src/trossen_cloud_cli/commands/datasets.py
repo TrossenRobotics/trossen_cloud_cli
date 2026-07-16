@@ -258,7 +258,7 @@ def add_episodes(
         typer.Option(
             "--cancel-in-progress",
             help="If another edit is already in progress on this dataset, cancel it and retry "
-            "(this discards that edit — it may belong to another user or process)",
+            "(this discards that edit — it may belong to another process or session)",
         ),
     ] = False,
 ) -> None:

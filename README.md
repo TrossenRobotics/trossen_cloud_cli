@@ -47,6 +47,29 @@ The token is stored securely in your OS keyring.
 # Upload a local dataset
 trc dataset upload ./my-data --name my-dataset
 
+# List episodes in a dataset
+trc dataset episodes <dataset-id>
+
+# Add a single new episode to an existing dataset
+trc dataset add-episodes <dataset-id> ./episode_000042.mcap
+
+# Add multiple episodes at once by pointing at a directory
+# (every .mcap inside is uploaded; non-.mcap files are skipped with a warning)
+trc dataset add-episodes <dataset-id> ./new-episodes/
+
+# If another edit is already in progress on the dataset, cancel it and retry
+# (this discards that edit, which may belong to another process or session)
+trc dataset add-episodes <dataset-id> ./new-episodes/ --cancel-in-progress
+
+# Remove episodes from a dataset (by filename)
+trc dataset remove-episodes <dataset-id> episode_000042.mcap
+
+# Remove multiple episodes at once (space-separated, up to 200 per call)
+trc dataset remove-episodes <dataset-id> episode_000042.mcap episode_000043.mcap episode_000044.mcap
+
+# The .mcap extension is optional, and --force skips the confirmation prompt
+trc dataset remove-episodes <dataset-id> episode_000042 episode_000043 --force
+
 # Download a dataset
 trc dataset download <dataset-id> ./output
 

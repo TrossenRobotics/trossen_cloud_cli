@@ -4,7 +4,10 @@ import re
 from pathlib import Path
 
 MCAP_MAGIC = bytes([0x89, 0x4D, 0x43, 0x41, 0x50, 0x30, 0x0D, 0x0A])
+# Legacy SDK naming: episode_NNNNNN.mcap (six-digit zero-padded sequential index).
 EPISODE_PATTERN = re.compile(r"^episode_(\d{6})\.mcap$")
+# Current SDK naming: episode_<id>.mcap where <id> is a random 16-char hex id.
+HEX_EPISODE_PATTERN = re.compile(r"^episode_[0-9a-f]{16}\.mcap$")
 
 
 def validate_mcap(path: Path) -> list[str]:
@@ -48,7 +51,13 @@ def _validate_single_mcap(path: Path, warnings: list[str]) -> list[str]:
 
 
 def _validate_episode_naming(mcap_files: list[Path], base_dir: Path, warnings: list[str]) -> None:
-    """Check that MCAP files follow the episode_NNNNNN.mcap naming convention."""
+    """Check that MCAP files follow a supported episode naming convention.
+
+    Two conventions are accepted: the legacy ``episode_NNNNNN.mcap`` (six-digit
+    zero-padded index) and the current ``episode_<16-hex>.mcap`` (random hex id).
+    Index-gap detection only applies to legacy numeric names; hex ids are random
+    and carry no ordering, so a "gap" is meaningless for them.
+    """
     episode_indices: list[int] = []
     non_conforming: list[str] = []
 
@@ -56,21 +65,22 @@ def _validate_episode_naming(mcap_files: list[Path], base_dir: Path, warnings: l
         match = EPISODE_PATTERN.match(f.name)
         if match:
             episode_indices.append(int(match.group(1)))
-        else:
+        elif not HEX_EPISODE_PATTERN.match(f.name):
             non_conforming.append(f.name)
 
     if non_conforming:
         if len(non_conforming) <= 5:
             warnings.append(
-                "MCAP files not matching episode_NNNNNN.mcap convention: "
-                + ", ".join(non_conforming)
+                "MCAP files not matching episode_NNNNNN.mcap or episode_<16-hex>.mcap "
+                "convention: " + ", ".join(non_conforming)
             )
         else:
             warnings.append(
-                f"{len(non_conforming)} MCAP files not matching episode_NNNNNN.mcap convention"
+                f"{len(non_conforming)} MCAP files not matching episode_NNNNNN.mcap "
+                "or episode_<16-hex>.mcap convention"
             )
 
-    # Check for gaps in episode indices
+    # Check for gaps in episode indices (legacy numeric names only)
     if episode_indices:
         episode_indices.sort()
         # Get the expected range of episode indices based on min and max found

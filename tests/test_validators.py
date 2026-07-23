@@ -544,6 +544,24 @@ class TestMcapValidator:
         warnings = validate_mcap(ds)
         assert any("episode_NNNNNN.mcap" in w for w in warnings)
 
+    def test_hex_episode_names_conforming(self, tmp_path):
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        for name in ("a3f9c2d1e8b44c1a", "5b1e0f7c2d3a9e84"):
+            _make_valid_mcap_file(ds / f"episode_{name}.mcap")
+        warnings = validate_mcap(ds)
+        assert not any("not matching" in w for w in warnings)
+        # Hex ids carry no ordering, so no gap/index warnings apply.
+        assert not any("gap" in w.lower() or "Missing episode" in w for w in warnings)
+
+    def test_mixed_hex_and_legacy_names_conforming(self, tmp_path):
+        ds = tmp_path / "dataset"
+        ds.mkdir()
+        _make_valid_mcap_file(ds / "episode_000000.mcap")
+        _make_valid_mcap_file(ds / "episode_a3f9c2d1e8b44c1a.mcap")
+        warnings = validate_mcap(ds)
+        assert not any("not matching" in w for w in warnings)
+
     def test_episode_index_gaps(self, tmp_path):
         ds = tmp_path / "dataset"
         ds.mkdir()
